@@ -19,7 +19,7 @@ Version 0.01 - this is an alpha release
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 DESCRIPTION
 
@@ -127,9 +127,7 @@ a non-existent index.
 
 =head2 Creating a new ElasticSearch instance
 
-=over
-
-=item C<new()>
+=head3 C<new()>
 
     $e = ElasticSearch->new(
             servers     =>  '127.0.0.1:9200'            # single server
@@ -143,10 +141,10 @@ a non-existent index.
 C<servers> is a required parameter and can be either a single server or an
 ARRAY ref with a list of servers.  These servers are used to retrieve a list
 of all servers in the cluster, after which one is chosen at random to be
-the L<current_server>.
+the L</"current_server()">.
 
-See also: L<debug>, L<ua_options>,
-          L<refresh_servers>, L<servers>, L<current_server>
+See also: L</"debug()">, L</"ua_options()">,
+          L</"refresh_servers()">, L</"servers()">, L</"current_server()">
 
 =cut
 
@@ -163,13 +161,9 @@ sub new {
     return $self;
 }
 
-=back
-
 =head2 Document-indexing methods
 
-=over
-
-=item C<index()>
+=head3 C<index()>
 
     $result = $e->index(
         index   => single,
@@ -219,7 +213,7 @@ to exists in the index.
 =back
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/index>
-and L<create_mapping>
+and L</"create_mapping()">
 
 =cut
 
@@ -227,9 +221,9 @@ and L<create_mapping>
 sub index {
 #===================================
     my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 0, type => 0);
-    if (my $id = $params->{id}) {
-        $cmd.='/'.$id;
+    my $cmd = $self->_build_cmd( $params, index => 0, type => 0 );
+    if ( my $id = $params->{id} ) {
+        $cmd .= '/' . $id;
     }
     my @qs;
     @qs = 'opType=create'
@@ -254,9 +248,9 @@ sub index {
         );
 }
 
-=item C<set()>
+=head3 C<set()>
 
-C<set()> is a synonym for L<index>
+C<set()> is a synonym for L</"index()">
 
 =cut
 
@@ -265,9 +259,9 @@ C<set()> is a synonym for L<index>
     *set = \&index;
 }
 
-=item C<create()>
+=head3 C<create()>
 
-C<create> is a synonym for L<index> but sets C<create> to C<true>
+C<create> is a synonym for L</"index()"> but sets C<create> to C<true>
 
 =cut
 
@@ -279,7 +273,7 @@ sub create {
     return $self->index($params);
 }
 
-=item C<get()>
+=head3 C<get()>
 
     $result = $e->get(
         index   => single,
@@ -315,11 +309,11 @@ sub get {
 #===================================
     my ( $self, $params ) = &_params;
     my $cmd = $self->_build_cmd( $params, index => 0, type => 0, id => 0 );
-    return $self->request( { method => 'GET',cmd    => $cmd});
+    return $self->request( { method => 'GET', cmd => $cmd } );
 
 }
 
-=item C<delete()>
+=head3 C<delete()>
 
     $result = $e->delete(
         index   => single,
@@ -338,16 +332,15 @@ See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete>
 
 =cut
 
-
 #===================================
 sub delete {
 #===================================
     my ( $self, $params ) = &_params;
     my $cmd = $self->_build_cmd( $params, index => 0, type => 0, id => 0 );
-    return $self->request( { method => 'DELETE',cmd    => $cmd});
+    return $self->request( { method => 'DELETE', cmd => $cmd } );
 }
 
-=item C<delete_by_query()>
+=head3 C<delete_by_query()>
 
     $result = $e->delete_by_query(
         index   => multi,
@@ -364,10 +357,10 @@ multiple indices and multiple types, eg
         query   => { term => {user => 'kimchy' }}
     );
 
-See also L<search>,
+See also L</"search()">,
          L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
 
-=item C<count()>
+=head3 C<count()>
 
     $result = $e->count(
         index   => multi,
@@ -384,7 +377,7 @@ against multiple indices and multiple types, eg
         query   => { term => {user => 'kimchy' }}
     );
 
-See also L<search>,
+See also L</"search()">,
          L<http://www.elasticsearch.com/docs/elasticsearch/json_api/count>
 
 =cut
@@ -394,7 +387,7 @@ sub delete_by_query { shift->_query( 'DELETE', '/_query', @_ ) }
 sub count           { shift->_query( 'GET',    '/_count', @_ ) }
 #===================================
 
-=item C<search()>
+=head3 C<search()>
 
     $result = $e->search(
         index   => multi,
@@ -442,13 +435,9 @@ sub _query {
         );
 }
 
-=back
-
 =head2 Index Admin methods
 
-=over
-
-=item C<index_status()>
+=head3 C<index_status()>
 
     $result = $e->index_status(
         index   => multi,
@@ -475,7 +464,7 @@ sub index_status {
         );
 }
 
-=item C<create_index()>
+=head3 C<create_index()>
 
     $result = $e->create_index(
         index   => single,
@@ -512,7 +501,7 @@ sub create_index {
         );
 }
 
-=item C<delete_index()>
+=head3 C<delete_index()>
 
     $result = $e->delete_index(
         index   => single
@@ -538,7 +527,7 @@ sub delete_index {
         );
 }
 
-=item C<flush_index()>
+=head3 C<flush_index()>
 
     $result = $e->flush_index(
         index   => multi
@@ -556,7 +545,7 @@ Example:
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/flush>
 
-=item C<refresh_index()>
+=head3 C<refresh_index()>
 
     $result = $e->refresh_index(
         index   => multi
@@ -573,7 +562,7 @@ Example:
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/refresh>
 
-=item C<gateway_snapshot()>
+=head3 C<gateway_snapshot()>
 
     $result = $e->gateway_snapshot(
         index   => multi
@@ -590,9 +579,9 @@ Example:
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/gateway_snapshot>
 and L<http://www.elasticsearch.com/docs/elasticsearch/modules/gateway>
 
-=item C<snapshot_index()>
+=head3 C<snapshot_index()>
 
-C<snapshot_index()> is a synonym for L<gateway_snapshot>
+C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
 
 =cut
 
@@ -619,7 +608,7 @@ sub _index {
         );
 }
 
-=item C<create_mapping()>
+=head3 C<create_mapping()>
 
     $result = $e->create_mapping(
         index       => multi,
@@ -671,13 +660,9 @@ sub create_mapping {
         );
 }
 
-=back
-
 =head2 Cluster admin methods
 
-=over
-
-=item C<cluster_state()>
+=head3 C<cluster_state()>
 
     $result = $e->cluster_state();
 
@@ -696,7 +681,7 @@ sub cluster_state {
     );
 }
 
-=item C<nodes()>
+=head3 C<nodes()>
 
     $result = $e->nodes(
         nodes       => multi,
@@ -773,18 +758,14 @@ sub _required_val {
     return $val;
 }
 
-=back
-
 =head2 Module-specific methods
 
-=over
-
-=item C<servers()>
+=head3 C<servers()>
 
     $servers = $e->servers
 
 Returns a list of the servers/nodes known to be in the cluster the last time
-that L<refresh_servers> was called.
+that L</"refresh_servers()"> was called.
 
 =cut
 
@@ -792,16 +773,16 @@ that L<refresh_servers> was called.
 sub servers { shift->{_servers}{$$} }
 #===================================
 
-=item C<refresh_servers()>
+=head3 C<refresh_servers()>
 
     $e->refresh_servers( $server | [$server_1, ...$server_n])
     $e->refresh_servers()
 
 Tries to contact each server in the list to retrieve a list of servers/nodes
-currently in the cluster. If it succeeds, then it updates L<servers> and
-randomly selects one server to be the L<current_server>
+currently in the cluster. If it succeeds, then it updates L</"servers()"> and
+randomly selects one server to be the L</"current_server()">
 
-If no servers are passed in, then it uses the list from L<servers> (ie
+If no servers are passed in, then it uses the list from L</"servers()"> (ie
 the last known good list) instead.
 
 Throws an exception if no servers can be found.
@@ -810,9 +791,9 @@ C<refresh_server> is called from :
 
 =over
 
-=item L<new>
+=item L</"new()">
 
-=item if any L<request> fails
+=item if any L</"request()"> fails
 
 =item if the process forks and the PID changes
 
@@ -858,12 +839,12 @@ sub refresh_servers {
         = { $$ => $live_servers[ int( rand(@live_servers) ) ] };
 }
 
-=item C<current_server()>
+=head3 C<current_server()>
 
     $current_server = $e->current_server()
 
 Returns the current server for the current PID, or if none is set, then it
-tries to get a new current server by calling L<refresh_servers>.
+tries to get a new current server by calling L</"refresh_servers()">.
 
 =cut
 
@@ -877,13 +858,13 @@ sub current_server {
     return $self->{_current_server}{$$};
 }
 
-=item C<ua()>
+=head3 C<ua()>
 
     $ua = $e->ua
 
 Returns the current L<LWP::UserAgent> instance for the current PID.  If there is
 none, then it creates a new instance, with any options specified in
-L<ua_options>
+L</"ua_options()">
 
 C<Keep-alive> is used by default (via L<LWP::ConnCache>).
 
@@ -901,14 +882,14 @@ sub ua {
     return $self->{_ua}{$$};
 }
 
-=item C<ua_options()>
+=head3 C<ua_options()>
 
     $ua_options = $e->ua({....})
 
 Get/sets the current list of options to be used when creating a new
 C<LWP::UserAgent> instance.  You may, for instance, want to set C<timeout>
 
-This is best set when creating a new instance of L<ElasticSearch> with L<new>.
+This is best set when creating a new instance of ElasticSearch with L</"new()">.
 
 =cut
 
@@ -923,7 +904,7 @@ sub ua_options {
     return $self->{_ua_options} ||= {};
 }
 
-=item C<JSON()>
+=head3 C<JSON()>
 
     $json_xs = $e->JSON
 
@@ -934,7 +915,7 @@ If you need to change the JSON settings you can do (eg):
 
     $e->JSON->utf8
 
-It is probably better not to fiddle with this!  L<ElasticSearch> expects all
+It is probably better not to fiddle with this!  ElasticSearch expects all
 data to be provided as Perl strings (not as UTF8 encoded byte strings) and
 returns all data from ElasticSearch as Perl strings.
 
@@ -944,7 +925,7 @@ returns all data from ElasticSearch as Perl strings.
 sub JSON { shift()->{_JSON} }
 #===================================
 
-=item C<request()>
+=head3 C<request()>
 
     $result = $e->request({
         method  => 'GET|PUT|POST|DELETE',
@@ -953,7 +934,7 @@ sub JSON { shift()->{_JSON} }
     })
 
 The C<request()> method is used to communicate with the ElasticSearch
-L<current_server>.  If any request fails with a C<Can't connect> error,
+L</"current_server()">.  If any request fails with a C<Can't connect> error,
 then C<request()> tries to refresh the server list, and repeats the request.
 
 Any other error will throw an exception.
@@ -1070,7 +1051,7 @@ sub _params {
     return ( $self, $params );
 }
 
-=item C<throw()>
+=head3 C<throw()>
 
     $e->throw('ErrorType','ErrorMsg', {vars})
 
@@ -1082,7 +1063,7 @@ Throws an exception of C<ref $e . '::Error::' . $error_type>, eg:
 
 Any vars passed in will be available as C<< $error->{-vars} >>.
 
-If L<debug> is C<true>, then C<< $error->{-stacktrace} >> will contain a
+If L</"debug()"> is C<true>, then C<< $error->{-stacktrace} >> will contain a
 stacktrace.
 
 =cut
@@ -1129,7 +1110,7 @@ sub _stack_trace {
     return $o .= $line;
 }
 
-=item C<debug()>
+=head3 C<debug()>
 
     $e->debug(1|0);
 
@@ -1181,8 +1162,6 @@ sub stringify {
     return $msg;
 }
 
-=back
-
 =head1 AUTHOR
 
 Clinton Gormley, C<< <drtech at cpan.org> >>
@@ -1191,9 +1170,9 @@ Clinton Gormley, C<< <drtech at cpan.org> >>
 
 =over
 
-=item   L<get>
+=item   L</"get()">
 
-The C<_source> key that is returned from a L<get> contains the original JSON
+The C<_source> key that is returned from a L</"get()"> contains the original JSON
 string that was used to index the document initially.  ElasticSearch parses
 JSON more leniently than L<JSON::XS>, so if invalid JSON is used to index the
 document (eg unquoted keys) then C<< $e->get(....) >> will fail with a
