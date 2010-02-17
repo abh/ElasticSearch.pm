@@ -9,6 +9,649 @@ use JSON::XS();
 use Data::Dump qw(pp);
 use Encode qw(decode_utf8);
 
+our $VERSION = '0.02';
+
+use constant { ONE_REQ     => 1,
+               ONE_OPT     => 2,
+               MULTI_ALL   => 3,
+               MULTI_BLANK => 4,
+};
+
+use constant {
+    CMD_INDEX_TYPE_ID => [ index => ONE_REQ, type => ONE_REQ, id => ONE_REQ ],
+    CMD_INDEX_TYPE_id => [ index => ONE_REQ, type => ONE_REQ, id => ONE_OPT ],
+    CMD_index      => [ index => MULTI_BLANK ],
+    CMD_INDEX      => [ index => ONE_REQ ],
+    CMD_index_TYPE => [ index => MULTI_ALL, type => ONE_REQ ],
+    CMD_index_type => [ index => MULTI_ALL, type => MULTI_BLANK ],
+    CMD_nodes      => [ nodes => MULTI_BLANK ],
+};
+
+our %Action = (
+
+    ## DOCUMENT MANAGEMENT
+    index => { cmd => CMD_INDEX_TYPE_id,
+               qs  => {create  => [ 'boolean',  'opType=create' ],
+                       timeout => [ 'duration', 'timeout' ],
+               },
+               data => 'data'
+    },
+
+    get => { cmd => CMD_INDEX_TYPE_ID },
+
+    delete => { method => 'DELETE',
+                cmd    => CMD_INDEX_TYPE_ID,
+    },
+
+    ## QUERIES
+    search => { cmd  => CMD_index_type,
+                data => 'query'
+    },
+
+    delete_by_query => { method  => 'DELETE',
+                         cmd     => CMD_index_type,
+                         postfix => '_query',
+                         data    => 'query'
+    },
+
+    count => { cmd    => CMD_index_type,
+               postfi => '_count',
+               data   => 'query'
+    },
+
+    ## INDEX MANAGEMENT
+    index_status => { cmd     => CMD_index,
+                      postfix => '_status'
+    },
+
+    create_index => { method  => 'PUT',
+                      cmd     => CMD_INDEX,
+                      postfix => '',
+                      data    => ['defn']
+    },
+
+    delete_index => { method  => 'DELETE',
+                      cmd     => CMD_INDEX,
+                      postfix => ''
+    },
+
+    flush_index => { method  => 'POST',
+                     cmd     => CMD_index,
+                     postfix => '_flush',
+                     qs      => { refresh => [ 'boolean', 'refresh=1' ] },
+    },
+
+    refresh_index => { method  => 'POST',
+                       cmd     => CMD_index,
+                       postfix => '_refresh'
+    },
+
+    optimize_index => {
+                    method  => 'POST',
+                    cmd     => CMD_index,
+                    postfix => '_optimize',
+                    qs      => {
+                        only_deletes => [ 'boolean', 'onlyExpungeDeletes=1' ],
+                        refresh      => [ 'boolean', 'refresh=1' ],
+                        flush        => [ 'boolean', 'flush=1' ]
+                    },
+    },
+
+    snapshot_index => { method  => 'POST',
+                        cmd     => CMD_index,
+                        postfix => '_gateway/snapshot'
+    },
+
+    gateway_snapshot => { method  => 'POST',
+                          cmd     => CMD_index,
+                          postfix => '_gateway/snapshot'
+    },
+
+    create_mapping => { method  => 'PUT',
+                        cmd     => CMD_index_TYPE,
+                        postfix => '_mapping',
+                        data    => { properties => 'properties' }
+    },
+
+    ## CLUSTER MANAGEMENT
+    cluster_state => { prefix => '_cluster/state' },
+
+    nodes => { prefix => '_cluser/nodes',
+               cmd    => CMD_nodes,
+               qs     => { settings => [ 'boolean', 'settings=1' ] }
+    },
+);
+
+## Add 'create' action
+$Action{create} = { %{ $Action{index} }, action => 'create' };
+$Action{create}{qs}
+    = { %{ $Action{index}{qs} }, create => [ 'fixed', 'opType=create' ] };
+
+our %QS_Format = ( boolean  => '1 | 0',
+                   duration => "'5m' | '10s'",
+                   fixed    => ''
+);
+
+our %QS_Formatter = (
+    fixed   => sub { return $_[1] },
+    boolean => sub { return $_[0] ? $_[1] : $_[2] },
+    duration => sub {
+        my ( $t, $k ) = @_;
+        return unless defined $t;
+        return "$k=$t" if $t =~ /^[\d+][smh]$/i;
+        die "$k '$t' is not in the form $QS_Format{duration}\n";
+    },
+);
+
+#===================================
+sub new {
+#===================================
+    my ( $proto, $params ) = &_params;
+    my $self = bless { _JSON => JSON::XS->new() }, ref $proto || $proto;
+    my $servers = delete $params->{servers};
+    for ( keys %$params ) {
+        $self->$_( $params->{$_} );
+    }
+    $self->refresh_servers($servers);
+    return $self;
+}
+
+#===================================
+sub index {
+#===================================
+    my ( $self, $params ) = &_params;
+    my $action = delete $params->{_action} || 'index';
+    $self->_do_action( {  %{ $Action{index} },
+                          action => $action,
+                          method => $params->{id} ? 'PUT' : 'POST',
+                       },
+                       $params,
+    );
+}
+
+#===================================
+sub set {
+#===================================
+    my ( $self, $params ) = &_params;
+    $params->{_action} = 'set';
+    return $self->index($params);
+}
+#===================================
+sub create {
+#===================================
+    my ( $self, $params ) = &_params;
+    $self->_do_action( {  %{ $Action{create} },
+                          method => $params->{id} ? 'PUT' : 'POST',
+                       },
+                       $params,
+    );
+}
+
+#===================================
+sub get              { shift->_default_action( 'get',              @_ ) }
+sub delete           { shift->_default_action( 'delete',           @_ ) }
+sub delete_by_query  { shift->_default_action( 'delete_by_query',  @_ ) }
+sub count            { shift->_default_action( 'count',            @_ ) }
+sub search           { shift->_default_action( 'search',           @_ ) }
+sub index_status     { shift->_default_action( 'index_status',     @_ ) }
+sub create_index     { shift->_default_action( 'create_index',     @_ ) }
+sub delete_index     { shift->_default_action( 'delete_index',     @_ ) }
+sub flush_index      { shift->_default_action( 'flush_index',      @_ ) }
+sub refresh_index    { shift->_default_action( 'refresh_index',    @_ ) }
+sub optimize_index   { shift->_default_action( 'optimize_index',   @_ ) }
+sub snapshot_index   { shift->_default_action( 'snapshot_index',   @_ ) }
+sub gateway_snapshot { shift->_default_action( 'gateway_snapshot', @_ ) }
+sub create_mapping   { shift->_default_action( 'create_mapping',   @_ ) }
+sub cluster_state    { shift->_default_action( 'cluster_state',    @_ ) }
+sub nodes            { shift->_default_action( 'nodes',            @_ ) }
+#===================================
+
+#===================================
+sub _default_action {
+#===================================
+    my $self   = shift;
+    my $action = shift;
+    my $params = ref $_[0] ? shift : {@_};
+    my $dfn    = $Action{$action}
+        or $self->throw( 'Internal', "Unknown action '$action'" );
+    $dfn->{action} = $action;
+    $self->_do_action( $dfn, $params );
+}
+
+#===================================
+sub _do_action {
+#===================================
+    my ( $self, $dfn, $params ) = @_;
+
+    my ( $cmd, $data, $error );
+
+    eval {
+        $cmd = join '',
+            grep {defined}
+            $self->_build_cmd( $params, @{$dfn}{qw(prefix cmd postfix)} ),
+            $self->_build_qs( $params, $dfn->{qs} );
+
+        $data = $self->_build_data( $params, $dfn->{data} );
+
+        1;
+    } or $error = $@ || 'Unknown error';
+
+    $self->throw( 'Param',
+                  $error . $self->_usage($dfn),
+                  { params => $params } )
+        if $error;
+
+    return
+        $self->request( { method => $dfn->{method} || 'GET',
+                          cmd    => $cmd,
+                          data   => $data,
+                        }
+        );
+}
+
+#===================================
+sub _usage {
+#===================================
+    my $self  = shift;
+    my $dfn   = shift;
+    my $usage = "Usage for '$dfn->{action}()':\n";
+    my @cmd   = @{ $dfn->{cmd} };
+    while ( my $key = shift @cmd ) {
+        my $type = shift @cmd;
+        my $arg_format
+            = $type == ONE_REQ ? "\$$key"
+            : $type == ONE_OPT ? "\$$key"
+            :                    "\$$key | [\$${key}_1,\$${key}_n]";
+
+        my $required = $type == ONE_REQ ? 'required' : 'optional';
+        $usage .= sprintf( "  - %-15s =>  %-45s # %s\n",
+                           $key, $arg_format, $required );
+    }
+    if ( my $qs = $dfn->{qs} ) {
+        for ( sort keys %$qs ) {
+            my $arg_format = $QS_Format{ $qs->{$_}[0] };
+            $usage .= sprintf( "  - %-15s =>  %-45s # optional\n", $_,
+                               $arg_format );
+        }
+    }
+
+    if ( my $data = $dfn->{data} ) {
+        $data = { data => $data } unless ref $data;
+        my @keys = sort { $a->[0] cmp $b->[0] }
+            map { ref $_ ? [ $_->[0], 'optional' ] : [ $_, 'required' ] }
+            values %$data;
+
+        for (@keys) {
+            $usage .= sprintf( "  - %-15s =>  %-45s # %s\n",
+                               $_->[0], '{' . $_->[0] . '}',
+                               $_->[1] );
+        }
+    }
+    return $usage;
+}
+
+#===================================
+sub _build_qs {
+#===================================
+    my $self   = shift;
+    my $params = shift;
+    my $dfn    = shift or return;
+    my @qs;
+    foreach my $key ( keys %$dfn ) {
+        my ( $format_name, @args ) = @{ $dfn->{$key} || [] };
+        $format_name ||= '';
+
+        my $formatter = $QS_Formatter{$format_name}
+            or die "Unknown QS formatter '$format_name'";
+
+        my $val = $formatter->( $params->{$key}, @args );
+        push @qs, $val if defined $val;
+    }
+    return unless @qs;
+    return '?' . join '&', @qs;
+}
+
+#===================================
+sub _build_data {
+#===================================
+    my $self   = shift;
+    my $params = shift;
+    my $dfn    = shift or return;
+
+    my $top_level;
+    if ( ref $dfn ne 'HASH' ) {
+        $top_level = 1;
+        $dfn = { data => $dfn };
+    }
+
+    my %data;
+KEY: while ( my ( $key, $source ) = each %$dfn ) {
+        if ( ref $source eq 'ARRAY' ) {
+            foreach (@$source) {
+                my $val = $params->{$_};
+                next unless defined $val;
+                $data{$key} = $val;
+                next KEY;
+            }
+        }
+        else {
+            $data{$key} = $params->{$source}
+                or die "Missing required param '$source'\n";
+        }
+    }
+    return $top_level ? $data{data} : \%data;
+}
+
+#===================================
+sub _build_cmd {
+#===================================
+    my $self   = shift;
+    my $params = shift;
+    my ( $prefix, $dfn, $postfix ) = @_;
+
+    my @dfn = (@$dfn);
+    my @cmd;
+    while (@dfn) {
+        my $key  = shift @dfn;
+        my $type = shift @dfn;
+
+        my $val = $params->{$key};
+        if ( defined $val ) {
+            if ( ref $val eq 'ARRAY' ) {
+                die "'$key' must be a single value\n"
+                    if $type == ONE_REQ || $type == ONE_OPT;
+                $val = join ',', @$val;
+            }
+        }
+        else {
+            next if $type == ONE_OPT || $type == MULTI_BLANK;
+            die "Param '$key' is required\n"
+                if $type == ONE_REQ;
+            $val = '_all';
+        }
+        push @cmd, $val;
+    }
+
+    return join '/', '', grep {defined} ( $prefix, @cmd, $postfix );
+}
+
+#===================================
+sub servers { shift->{_servers}{$$} }
+#===================================
+
+#===================================
+sub refresh_servers {
+#===================================
+    my $self = shift;
+    my @servers
+        = @_ == 0 ? @{ ( values %{ $self->{_servers} } )[0] || [] }
+        : ref $_[0] eq 'ARRAY' ? ( @{ $_[0] } )
+        :                        (@_);
+
+    my @live_servers;
+    foreach my $server (@servers) {
+        next unless $server;
+        $server = 'http://' . $server unless $server =~ m{^http(?:s)?://};
+        $server =~ s{/+$}{};
+
+        my $nodes = eval {
+            my $result = $self->_request( $server, 'GET', '/_cluster/nodes' );
+            return $result->{nodes};
+        } or next;
+
+        @live_servers = map { $_->{httpAddress} }
+            grep { $_->{httpAddress} } values %$nodes;
+        last if @live_servers;
+    }
+    $self->throw( 'NoServers',
+                  "Could not retrieve a list of active servers",
+                  { servers => \@servers } )
+        unless @live_servers;
+    for (@live_servers) {
+        $_ =~ m{inet\[(\S*)/(\S+):(\d+)\]};
+        $_ = 'http://' . ( $1 || $2 ) . ':' . $3;
+    }
+
+    $self->{_servers} = { $$ => \@live_servers };
+    $self->{_current_server}
+        = { $$ => $live_servers[ int( rand(@live_servers) ) ] };
+}
+
+#===================================
+sub current_server {
+#===================================
+    my $self = shift;
+    unless ( $self->{_current_server}{$$} ) {
+        $self->refresh_servers;
+    }
+    return $self->{_current_server}{$$};
+}
+
+#===================================
+sub ua {
+#===================================
+    my $self = shift;
+    unless ( $self->{_ua}{$$} ) {
+        my $ua = $self->{_ua} = LWP::UserAgent->new( %{ $self->ua_options } );
+        $ua->conn_cache( LWP::ConnCache->new );
+        $self->{_ua} = { $$ => $ua };
+    }
+    return $self->{_ua}{$$};
+}
+
+#===================================
+sub ua_options {
+#===================================
+    my $self = shift;
+    if (@_) {
+        ( undef, my $params ) = $self->_params(@_);
+        $self->{_ua_options} = $params;
+    }
+    return $self->{_ua_options} ||= {};
+}
+
+#===================================
+sub JSON { shift()->{_JSON} }
+#===================================
+
+#===================================
+sub request {
+#===================================
+    my $self   = shift;
+    my $params = shift;
+    my $method = $params->{method} || 'GET';
+    my $cmd    = $params->{cmd}
+        || $self->throw( 'Request', "No cmd specified" );
+
+    my $data = $params->{data};
+    my $json = $self->JSON;
+    $data = $json->encode($data)
+        if defined $data;
+
+    while (1) {
+        my $current_server = $self->current_server;
+        my ( $result, $error );
+        eval {
+            $result
+                = $self->_request( $current_server, $method, $cmd, $data );
+            1;
+        } or $error = $@ || 'Unknown error';
+
+        return $result unless $error;
+
+        if ( ref $error ) {
+            my $code = $error->{-vars}{status_code} || 0;
+            my $msg  = $error->{-vars}{status_msg}  || '';
+            if ( $code == 500 && $msg =~ /Can't connect/ ) {
+                warn "Error connecting to '$current_server' : $msg";
+                $self->refresh_servers;
+                next;
+            }
+            $error->{-vars}{request} = $params;
+            die $error;
+        }
+
+        $self->throw( 'Request', $error, { request => $params } );
+    }
+}
+
+#===================================
+sub _request {
+#===================================
+    my $self           = shift;
+    my $current_server = shift;
+    my $method         = shift;
+    my $cmd            = shift;
+    my $data           = shift;
+    my $request = HTTP::Request->new( $method, $current_server . $cmd );
+
+    $request->add_content_utf8($data)
+        if defined $data;
+    use Data::Dump qw(pp);
+    pp( { cmd => $cmd, data => $data } );
+
+    my $server_response = $self->ua->request($request);
+
+    my $content = $server_response->decoded_content;
+    $content = decode_utf8($content);
+
+    my ( $result, $json_error );
+    eval { $result = $self->JSON->decode($content); 1 }
+        or $json_error = ( $@ || 'Unknown JSON error' );
+
+    my $success = $server_response->is_success;
+
+    return $result if $success && !$json_error;
+
+    my $error_params = {
+        server      => $current_server,
+        response    => $json_error ? $content : $result,
+        status_code => $server_response->code,
+        status_msg  => $server_response->message,
+
+    };
+
+    my ( $error_type, $error_msg );
+    if ( $success && $json_error ) {
+        $error_type = 'JSON';
+        $error_msg  = $json_error;
+    }
+    else {
+        $error_type = 'Request';
+        $error_msg
+            = $result && $result->{error}
+            ? $result->{error}
+            : $error_params->{status_msg} . ' ('
+            . $error_params->{status_code} . ')';
+    }
+
+    $self->throw( $error_type, $error_msg, $error_params );
+}
+
+#===================================
+sub _params {
+#===================================
+    my $self = shift;
+    my $params;
+    if ( @_ % 2 ) {
+        $self->throw( "Param",
+                      'Expecting a HASH ref or a list of key-value pairs',
+                      { params => \@_ } )
+            unless ref $_[0] eq 'HASH';
+        $params = shift;
+    }
+    else {
+        $params = {@_};
+    }
+    return ( $self, $params );
+}
+#===================================
+sub throw {
+#===================================
+    my $self = shift;
+    my $type = shift;
+    my $msg  = shift;
+    my $vars = shift;
+
+    my $class = ref $self || $self;
+    my $error_class = $class . '::Error::' . $type;
+
+    $msg = 'Unknown error' unless defined $msg;
+    $msg =~ s/\n/\n    /g;
+
+    my $debug = ref $self ? $self->debug : 1;
+    my ( undef, $file, $line ) = caller(0);
+    my $error = bless { -text       => $msg,
+                        -line       => $line,
+                        -file       => $file,
+                        -vars       => $vars,
+                        -stacktrace => $debug ? _stack_trace() : ''
+    }, $error_class;
+
+    die $error;
+}
+
+#===================================
+sub _stack_trace {
+#===================================
+    my $i    = 2;
+    my $line = ( '-' x 60 ) . "\n";
+    my $o    = $line
+        . sprintf( "%-4s %-30s %-5s %s\n",
+                   ( '#', 'Package', 'Line', 'Sub-routine' ) )
+        . $line;
+    while ( my @caller = caller($i) ) {
+        $o .= sprintf( "%-4d %-30s %4d  %s\n", $i++, @caller[ 0, 2, 3 ] );
+        last if $caller[3] eq '(eval)';
+    }
+    return $o .= $line;
+}
+
+#===================================
+sub debug {
+#===================================
+    my $self = shift;
+    if (@_) { $self->{_debug} = !!shift() }
+    return $self->{_debug};
+}
+
+#===================================
+#===================================
+package ElasticSearch::Error;
+#===================================
+#===================================
+@ElasticSearch::Error::Internal::ISA  = __PACKAGE__;
+@ElasticSearch::Error::Param::ISA     = __PACKAGE__;
+@ElasticSearch::Error::NoServers::ISA = __PACKAGE__;
+@ElasticSearch::Error::Request::ISA   = __PACKAGE__;
+@ElasticSearch::Error::JSON::ISA      = __PACKAGE__;
+
+use strict;
+use warnings FATAL => 'all', NONFATAL => 'redefine';
+
+use overload ( '""' => 'stringify' );
+use Data::Dump qw(pp);
+
+#===================================
+sub stringify {
+#===================================
+    my $error     = shift;
+    my $object_id = $error->{-object_id};
+
+    my $msg
+        = '[ERROR] ** '
+        . ( ref($error) || 'ElasticSearch::Error' ) . ' at '
+        . $error->{-file}
+        . ' line '
+        . $error->{-line} . " : \n"
+        . ( $error->{-text} || 'Missing error message' ) . "\n"
+        . ( $error->{-vars}
+            ? "With vars:\n" . pp( $error->{-vars} ) . "\n"
+            : ''
+        ) . $error->{-stacktrace};
+    return $msg;
+}
+
 =head1 NAME
 
 ElasticSearch - An API for communicating with ElasticSearch
@@ -18,8 +661,6 @@ ElasticSearch - An API for communicating with ElasticSearch
 Version 0.01 - this is an alpha release
 
 =cut
-
-our $VERSION = '0.02';
 
 =head1 DESCRIPTION
 
@@ -37,6 +678,8 @@ disappears, then it attempts to connect to another node in the list.
 
 Forking a process triggers a server list refresh, and a new connection to
 a randomly chosen node in the list.
+
+=cut
 
 =head1 SYNOPSIS
 
@@ -69,6 +712,8 @@ a randomly chosen node in the list.
         }
     );
 
+=cut
+
 =head1 GETTING ElasticSearch
 
 You can download the latest release from
@@ -92,6 +737,7 @@ autodiscover each other.
 More instructions are available here:
 L<http://www.elasticsearch.com/docs/elasticsearch/setup/installation>
 
+=cut
 
 =head1 CALLING CONVENTIONS
 
@@ -114,6 +760,8 @@ C<single> values must be a scalar, and are required parameters
 
       type  => 'tweet'
 
+=cut
+
 =head1 RETURN VALUES AND EXCEPTIONS
 
 Methods that query the ElasticSearch cluster return the raw data structure
@@ -122,6 +770,8 @@ data structures are still in flux, I thought it safer not to try to interpret.
 
 Anything that is know to be an error throws an exception, eg trying to delete
 a non-existent index.
+
+=cut
 
 =head1 METHODS
 
@@ -147,19 +797,6 @@ See also: L</"debug()">, L</"ua_options()">,
           L</"refresh_servers()">, L</"servers()">, L</"current_server()">
 
 =cut
-
-#===================================
-sub new {
-#===================================
-    my ( $proto, $params ) = &_params;
-    my $self = bless { _JSON => JSON::XS->new() }, ref $proto || $proto;
-    my $servers = delete $params->{servers};
-    for ( keys %$params ) {
-        $self->$_( $params->{$_} );
-    }
-    $self->refresh_servers($servers);
-    return $self;
-}
 
 =head2 Document-indexing methods
 
@@ -212,66 +849,18 @@ to exists in the index.
 
 =back
 
-See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/index>
+See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/index>
 and L</"create_mapping()">
 
-=cut
-
-#===================================
-sub index {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 0, type => 0 );
-    if ( my $id = $params->{id} ) {
-        $cmd .= '/' . $id;
-    }
-    my @qs;
-    @qs = 'opType=create'
-        if $params->{create};
-
-    if ( my $timeout = $params->{timeout} ) {
-        $self->throw( 'Param',
-                      "Timeout '$timeout' is not in the form '5m' or '10s'",
-                      { request => $params } )
-            unless $timeout =~ /^\d+[smh]$/i;
-        push @qs, 'timeout=' . $timeout;
-    }
-
-    if (@qs) {
-        $cmd .= '?' . join '&', @qs;
-    }
-    return
-        $self->request( { method => 'PUT',
-                          cmd    => $cmd,
-                          data   => $self->_required_val( $params, 'data' ),
-                        }
-        );
-}
 
 =head3 C<set()>
 
 C<set()> is a synonym for L</"index()">
 
-=cut
-
-{
-    no warnings 'once';
-    *set = \&index;
-}
 
 =head3 C<create()>
 
 C<create> is a synonym for L</"index()"> but sets C<create> to C<true>
-
-=cut
-
-#===================================
-sub create {
-#===================================
-    my ( $self, $params ) = &_params;
-    $params->{create} = 1;
-    return $self->index($params);
-}
 
 =head3 C<get()>
 
@@ -302,17 +891,6 @@ Example:
 See also: L<KNOWN ISSUES>,
           L<http://www.elasticsearch.com/docs/elasticsearch/json_api/get>
 
-=cut
-
-#===================================
-sub get {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 0, type => 0, id => 0 );
-    return $self->request( { method => 'GET', cmd => $cmd } );
-
-}
-
 =head3 C<delete()>
 
     $result = $e->delete(
@@ -329,16 +907,6 @@ Example:
     $e->delete( index => 'twitter', type => 'tweet', id => 1);
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete>
-
-=cut
-
-#===================================
-sub delete {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 0, type => 0, id => 0 );
-    return $self->request( { method => 'DELETE', cmd => $cmd } );
-}
 
 =head3 C<delete_by_query()>
 
@@ -380,13 +948,6 @@ against multiple indices and multiple types, eg
 See also L</"search()">,
          L<http://www.elasticsearch.com/docs/elasticsearch/json_api/count>
 
-=cut
-
-#===================================
-sub delete_by_query { shift->_query( 'DELETE', '/_query', @_ ) }
-sub count           { shift->_query( 'GET',    '/_count', @_ ) }
-#===================================
-
 =head3 C<search()>
 
     $result = $e->search(
@@ -407,33 +968,8 @@ against multiple indices and multiple types, eg:
 For all of the options that can be included in the C<query> parameter, see
 L<http://www.elasticsearch.com/docs/elasticsearch/json_api/search>
 
+
 =cut
-
-#===================================
-sub search {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $query = $self->_required_val( $params, 'query' );
-    $params->{query} = { query => $query };
-    return $self->_query( 'GET', '/_search', $params );
-}
-
-#===================================
-sub _query {
-#===================================
-    my $self        = shift;
-    my $method      = shift;
-    my $cmd_postfix = shift;
-    ( undef, my $params ) = $self->_params(@_);
-    my $cmd
-        = $self->_build_cmd( $params, index => 1, type => 1 ) . $cmd_postfix;
-    return
-        $self->request( { method => $method,
-                          cmd    => $cmd,
-                          data   => $self->_required_val( $params, 'query' ),
-                        }
-        );
-}
 
 =head2 Index Admin methods
 
@@ -449,21 +985,6 @@ Returns the status of
     $result = $e->index_status( index => 'twitter' );
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/status>
-
-=cut
-
-#===================================
-sub index_status {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 1 ) . '/_status';
-    return
-        $self->request( { method => 'GET',
-                          cmd    => $cmd,
-                        }
-        );
-}
-
 =head3 C<create_index()>
 
     $result = $e->create_index(
@@ -485,22 +1006,6 @@ Throws an exception if the index already exists.
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/create_index>
 
-=cut
-
-#===================================
-sub create_index {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 0 ) . '/';
-    my $defn = $params->{defn} ? { index => $params->{defn} } : undef;
-    return
-        $self->request( { method => 'PUT',
-                          cmd    => $cmd,
-                          data   => $defn
-                        }
-        );
-}
-
 =head3 C<delete_index()>
 
     $result = $e->delete_index(
@@ -512,20 +1017,6 @@ Deletes an existing index, or throws an exception if the index doesn't exist, eg
     $result = $e->delete_index( index => 'twitter' );
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/delete_index>
-
-=cut
-
-#===================================
-sub delete_index {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 0 ) . '/';
-    return
-        $self->request( { method => 'DELETE',
-                          cmd    => $cmd,
-                        }
-        );
-}
 
 =head3 C<flush_index()>
 
@@ -583,30 +1074,14 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/modules/gateway>
 
 C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
 
-=cut
+=head3 C<optimize_index()>
 
-#===================================
-sub flush_index      { shift->_index( '/_flush',            @_ ) }
-sub refresh_index    { shift->_index( '/_refresh',          @_ ) }
-sub snapshot_index   { shift->_index( '/_gateway/snapshot', @_ ) }
-sub gateway_snapshot { shift->_index( '/_gateway/snapshot', @_ ) }
-#===================================
-
-#===================================
-sub _index {
-#===================================
-    my $self        = shift;
-    my $cmd_postfix = shift;
-    ( undef, my $params ) = $self->_params(@_);
-    my $cmd = $self->_build_cmd( $params, index => 1 );
-    $cmd = '' if $cmd eq '/_all';
-    $cmd .= $cmd_postfix;
-    return
-        $self->request( { method => 'POST',
-                          cmd    => $cmd,
-                        }
-        );
-}
+    $result = $e->optimize_index(
+        index           => multi,
+        only_deletes    => 1 | 0,  # onlyExpungeDeletes
+        flush           => 1 | 0,  # flush after optmization
+        refresh         => 1 | 0,  # refresh after optmization
+    )
 
 =head3 C<create_mapping()>
 
@@ -644,22 +1119,6 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
 
 =cut
 
-#===================================
-sub create_mapping {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, index => 1, type => 0 );
-    $cmd .= '/_mapping';
-    my $properties = $self->_required_val( $params, 'properties' );
-
-    return
-        $self->request( { method => 'PUT',
-                          cmd    => $cmd,
-                          data   => { properties => $properties }
-                        }
-        );
-}
-
 =head2 Cluster admin methods
 
 =head3 C<cluster_state()>
@@ -669,17 +1128,6 @@ sub create_mapping {
 Returns cluster state information.
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/cluster/state/>
-
-=cut
-
-#===================================
-sub cluster_state {
-#===================================
-    shift()->request( { method => 'GET',
-                        cmd    => '/_cluster/state',
-                      }
-    );
-}
 
 =head3 C<nodes()>
 
@@ -695,69 +1143,6 @@ See: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/cluster/no
 
 =cut
 
-#===================================
-sub nodes {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $cmd = $self->_build_cmd( $params, nodes => 1 );
-    $cmd = '/_cluster/nodes' . $cmd;
-    $cmd = '/_cluster/nodes' if $cmd eq '/_cluster/nodes/_all';
-    $cmd .= '?settings=true' if $params->{settings};
-
-    return
-        $self->request( { method => 'GET',
-                          cmd    => $cmd,
-                        }
-        );
-}
-
-#===================================
-sub _build_cmd {
-#===================================
-    my ( $self, $params ) = &_params;
-
-    my $cmd = '';
-    while (@_) {
-        my $key   = shift;
-        my $multi = shift;
-        my $val   = $params->{$key};
-        if ($multi) {
-            if ( defined $val ) {
-                if ( my $ref = ref $val ) {
-                    $self->throw( 'Param',
-                                  "Param '$key' is not an array",
-                                  { request => $params } )
-                        if $ref ne 'ARRAY';
-                    $val = join( ',', @$val );
-                }
-            }
-            elsif ($cmd) {next}
-            else         { $val = '_all'; }
-        }
-        elsif ( !defined $val ) {
-            $self->throw( 'Param',
-                          "Missing required param '$key'",
-                          { request => $params } );
-        }
-        $cmd .= '/' . $val;
-    }
-    return $cmd;
-}
-
-#===================================
-sub _required_val {
-#===================================
-    my $self   = shift;
-    my $params = shift;
-    my $key    = shift;
-    my $val    = $params->{$key};
-    $self->throw( 'Param',
-                  "Missing required param '$key'",
-                  { request => $params } )
-        unless defined $val;
-    return $val;
-}
-
 =head2 Module-specific methods
 
 =head3 C<servers()>
@@ -766,12 +1151,6 @@ sub _required_val {
 
 Returns a list of the servers/nodes known to be in the cluster the last time
 that L</"refresh_servers()"> was called.
-
-=cut
-
-#===================================
-sub servers { shift->{_servers}{$$} }
-#===================================
 
 =head3 C<refresh_servers()>
 
@@ -799,64 +1178,12 @@ C<refresh_server> is called from :
 
 =back
 
-=cut
-
-#===================================
-sub refresh_servers {
-#===================================
-    my $self = shift;
-    my @servers
-        = @_ == 0 ? @{ ( values %{ $self->{_servers} } )[0] || [] }
-        : ref $_[0] eq 'ARRAY' ? ( @{ $_[0] } )
-        :                        (@_);
-
-    my @live_servers;
-    foreach my $server (@servers) {
-        next unless $server;
-        $server = 'http://' . $server unless $server =~ m{^http(?:s)?://};
-        $server =~ s{/+$}{};
-
-        my $nodes = eval {
-            my $result = $self->_request( $server, 'GET', '/_cluster/nodes' );
-            return $result->{nodes};
-        } or next;
-
-        @live_servers = map { $_->{httpAddress} }
-            grep { $_->{httpAddress} } values %$nodes;
-        last if @live_servers;
-    }
-    $self->throw( 'NoServers',
-                  "Could not retrieve a list of active servers",
-                  { servers => \@servers } )
-        unless @live_servers;
-    for (@live_servers) {
-        $_ =~ m{inet\[(\S*)/(\S+):(\d+)\]};
-        $_ = 'http://' . ( $1 || $2 ) . ':' . $3;
-    }
-
-    $self->{_servers} = { $$ => \@live_servers };
-    $self->{_current_server}
-        = { $$ => $live_servers[ int( rand(@live_servers) ) ] };
-}
-
 =head3 C<current_server()>
 
     $current_server = $e->current_server()
 
 Returns the current server for the current PID, or if none is set, then it
 tries to get a new current server by calling L</"refresh_servers()">.
-
-=cut
-
-#===================================
-sub current_server {
-#===================================
-    my $self = shift;
-    unless ( $self->{_current_server}{$$} ) {
-        $self->refresh_servers;
-    }
-    return $self->{_current_server}{$$};
-}
 
 =head3 C<ua()>
 
@@ -868,20 +1195,6 @@ L</"ua_options()">
 
 C<Keep-alive> is used by default (via L<LWP::ConnCache>).
 
-=cut
-
-#===================================
-sub ua {
-#===================================
-    my $self = shift;
-    unless ( $self->{_ua}{$$} ) {
-        my $ua = $self->{_ua} = LWP::UserAgent->new( %{ $self->ua_options } );
-        $ua->conn_cache( LWP::ConnCache->new );
-        $self->{_ua} = { $$ => $ua };
-    }
-    return $self->{_ua}{$$};
-}
-
 =head3 C<ua_options()>
 
     $ua_options = $e->ua({....})
@@ -892,17 +1205,6 @@ C<LWP::UserAgent> instance.  You may, for instance, want to set C<timeout>
 This is best set when creating a new instance of ElasticSearch with L</"new()">.
 
 =cut
-
-#===================================
-sub ua_options {
-#===================================
-    my $self = shift;
-    if (@_) {
-        ( undef, my $params ) = $self->_params(@_);
-        $self->{_ua_options} = $params;
-    }
-    return $self->{_ua_options} ||= {};
-}
 
 =head3 C<JSON()>
 
@@ -921,10 +1223,6 @@ returns all data from ElasticSearch as Perl strings.
 
 =cut
 
-#===================================
-sub JSON { shift()->{_JSON} }
-#===================================
-
 =head3 C<request()>
 
     $result = $e->request({
@@ -938,118 +1236,6 @@ L</"current_server()">.  If any request fails with a C<Can't connect> error,
 then C<request()> tries to refresh the server list, and repeats the request.
 
 Any other error will throw an exception.
-
-=cut
-
-#===================================
-sub request {
-#===================================
-    my $self   = shift;
-    my $params = shift;
-    my $method = $params->{method} || 'GET';
-    my $cmd    = $params->{cmd}
-        || $self->throw( 'Request', "No cmd specified" );
-
-    my $data = $params->{data};
-    my $json = $self->JSON;
-    $data = $json->encode($data)
-        if defined $data;
-
-    while (1) {
-        my $current_server = $self->current_server;
-        my ( $result, $error );
-        eval {
-            $result
-                = $self->_request( $current_server, $method, $cmd, $data );
-            1;
-        } or $error = $@ || 'Unknown error';
-
-        return $result unless $error;
-
-        if ( ref $error ) {
-            my $code = $error->{-vars}{status_code} || 0;
-            my $msg  = $error->{-vars}{status_msg}  || '';
-            if ( $code == 500 && $msg =~ /Can't connect/ ) {
-                warn "Error connecting to '$current_server' : $msg";
-                $self->refresh_servers;
-                next;
-            }
-            $error->{-vars}{request} = $params;
-            die $error;
-        }
-
-        $self->throw( 'Request', $error, { request => $params } );
-    }
-}
-
-#===================================
-sub _request {
-#===================================
-    my $self           = shift;
-    my $current_server = shift;
-    my $method         = shift;
-    my $cmd            = shift;
-    my $data           = shift;
-    my $request = HTTP::Request->new( $method, $current_server . $cmd );
-
-    $request->add_content_utf8($data)
-        if defined $data;
-
-    my $server_response = $self->ua->request($request);
-
-    my $content = $server_response->decoded_content;
-    $content = decode_utf8($content);
-
-    my ( $result, $json_error );
-    eval { $result = $self->JSON->decode($content); 1 }
-        or $json_error = ( $@ || 'Unknown JSON error' );
-
-    my $success = $server_response->is_success;
-
-    return $result if $success && !$json_error;
-
-    my $error_params = {
-        server      => $current_server,
-        response    => $json_error ? $content : $result,
-        status_code => $server_response->code,
-        status_msg  => $server_response->message,
-
-    };
-
-    my ( $error_type, $error_msg );
-    if ( $success && $json_error ) {
-        $error_type = 'JSON';
-        $error_msg  = $json_error;
-    }
-    else {
-        $error_type = 'Request';
-        $error_msg
-            = $result && $result->{error}
-            ? $result->{error}
-            : $error_params->{status_msg} . ' ('
-            . $error_params->{status_code} . ')';
-    }
-
-    $self->throw( $error_type, $error_msg, $error_params );
-}
-
-#===================================
-sub _params {
-#===================================
-    my $self = shift;
-    my $params;
-    if ( @_ % 2 ) {
-        $self->throw( "Param",
-                      'Expecting a HASH ref or a list of key-value pairs',
-                      { params => \@_ } )
-            unless ref $_[0] eq 'HASH';
-        $params = shift;
-    }
-    else {
-        $params = {@_};
-    }
-    return ( $self, $params );
-}
 
 =head3 C<throw()>
 
@@ -1066,50 +1252,6 @@ Any vars passed in will be available as C<< $error->{-vars} >>.
 If L</"debug()"> is C<true>, then C<< $error->{-stacktrace} >> will contain a
 stacktrace.
 
-=cut
-
-#===================================
-sub throw {
-#===================================
-    my $self = shift;
-    my $type = shift;
-    my $msg  = shift;
-    my $vars = shift;
-
-    my $class = ref $self || $self;
-    my $error_class = $class . '::Error::' . $type;
-
-    $msg = 'Unknown error' unless defined $msg;
-    $msg =~ s/\n/\n    /g;
-
-    my $debug = ref $self ? $self->debug : 1;
-    my ( undef, $file, $line ) = caller(0);
-    my $error = bless { -text       => $msg,
-                        -line       => $line,
-                        -file       => $file,
-                        -vars       => $vars,
-                        -stacktrace => $debug ? _stack_trace() : ''
-    }, $error_class;
-
-    die $error;
-}
-
-#===================================
-sub _stack_trace {
-#===================================
-    my $i    = 2;
-    my $line = ( '-' x 60 ) . "\n";
-    my $o    = $line
-        . sprintf( "%-4s %-30s %-5s %s\n",
-                   ( '#', 'Package', 'Line', 'Sub-routine' ) )
-        . $line;
-    while ( my @caller = caller($i) ) {
-        $o .= sprintf( "%-4d %-30s %4d  %s\n", $i++, @caller[ 0, 2, 3 ] );
-        last if $caller[3] eq '(eval)';
-    }
-    return $o .= $line;
-}
-
 =head3 C<debug()>
 
     $e->debug(1|0);
@@ -1117,50 +1259,6 @@ sub _stack_trace {
 If C<debug()> is C<true>, then exceptions include a stack trace.
 
 =cut
-
-#===================================
-sub debug {
-#===================================
-    my $self = shift;
-    if (@_) { $self->{_debug} = !!shift() }
-    return $self->{_debug};
-}
-
-#===================================
-#===================================
-package ElasticSearch::Error;
-#===================================
-#===================================
-@ElasticSearch::Error::Param::ISA     = __PACKAGE__;
-@ElasticSearch::Error::NoServers::ISA = __PACKAGE__;
-@ElasticSearch::Error::Request::ISA   = __PACKAGE__;
-@ElasticSearch::Error::JSON::ISA      = __PACKAGE__;
-
-use strict;
-use warnings FATAL => 'all', NONFATAL => 'redefine';
-
-use overload ( '""' => 'stringify' );
-use Data::Dump qw(pp);
-
-#===================================
-sub stringify {
-#===================================
-    my $error     = shift;
-    my $object_id = $error->{-object_id};
-
-    my $msg
-        = '[ERROR] ** '
-        . ( ref($error) || 'ElasticSearch::Error' ) . ' at '
-        . $error->{-file}
-        . ' line '
-        . $error->{-line} . " : \n"
-        . ( $error->{-text} || 'Missing error message' ) . "\n"
-        . ( $error->{-vars}
-            ? "With vars:\n" . pp( $error->{-vars} ) . "\n"
-            : ''
-        ) . $error->{-stacktrace};
-    return $msg;
-}
 
 =head1 AUTHOR
 
