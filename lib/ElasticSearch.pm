@@ -9,7 +9,7 @@ use JSON::XS();
 use Data::Dump qw(pp);
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use constant { ONE_REQ     => 1,
                ONE_OPT     => 2,
@@ -727,7 +727,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.02 - this is an alpha release
+Version 0.03 - this is an alpha release
 
 =cut
 
@@ -990,19 +990,14 @@ See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete>
     $result = $e->search(
         index           => multi,
         type            => multi,
-        bool            =>  {bool query}                # optional
-        constant_score  =>  {constant_score query}      # optional
-        dis_max         =>  {dis_max query}             # optional
-        explain         =>  {explain query}             # optional
-        facet           =>  {facet query}               # optional
-        fields          =>  {fields query}              # optional
-        filtered_query  =>  {filtered_query query}      # optional
-        from            =>  {from query}                # optional
-        query           =>  {query query}               # optional
-        query_string    =>  {query_string query}        # optional
-        search_type     =>  {search_type query}         # optional
-        size            =>  {size query}                # optional
-        sort            =>  {sort query}                # optional
+        query           => {query},
+        search_type     => $search_type         # optional
+        explain         => 1 | 0                # optional
+        facets          => { facets }           # optional
+        fields          => [$field_1,$field_n]  # optional
+        from            => $start_from          # optional
+        size            => $no_of_results       # optional
+        sort            => ['score',$field_1]   # optional
     );
 
 Searches for all documents matching the query. Documents can be matched
@@ -1015,37 +1010,27 @@ against multiple indices and multiple types, eg:
     );
 
 For all of the options that can be included in the C<query> parameter, see
+L<ElasticSearch::QueryDSL>,
 L<http://www.elasticsearch.com/docs/elasticsearch/json_api/search> and
 L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
 
-=head3 C<delete_by_query()>
-
-    $result = $e->delete_by_query(
-        index   => multi,
-        type    => multi,
-        query   => {...}        # see search() for all options
-    );
-
-Deletes any documents matching the query. Documents can be matched against
-multiple indices and multiple types, eg
-
-    $result = $e->delete_by_query(
-        index   => undef,               # all
-        type    => ['user','tweet'],
-        query   => { term => {user => 'kimchy' }}
-    );
-
-See also L</"search()">,
-         L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
-
 =head3 C<count()>
 
     $result = $e->count(
-        index   => multi,
-        type    => multi,
-        query   => {...}        # see search() for all options
+        index           => multi,
+        type            => multi,
 
+        term
+      | range
+      | prefix
+      | wildcard
+      | match_all
+      | query_string
+      | bool
+      | disMax
+      | constantScore
+      | filteredQuery   => { query }
     );
 
 Counts the number of documents matching the query. Documents can be matched
@@ -1057,8 +1042,41 @@ against multiple indices and multiple types, eg
         query   => { term => {user => 'kimchy' }}
     );
 
-See also L</"search()">,
-         L<http://www.elasticsearch.com/docs/elasticsearch/json_api/count>
+See also L</"search()">, L<ElasticSearch::QueryDSL>,
+L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
+and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
+
+
+=head3 C<delete_by_query()>
+
+    $result = $e->delete_by_query(
+        index           => multi,
+        type            => multi,
+
+        term
+      | range
+      | prefix
+      | wildcard
+      | match_all
+      | query_string
+      | bool
+      | disMax
+      | constantScore
+      | filteredQuery   => { query }
+    );
+
+Deletes any documents matching the query. Documents can be matched against
+multiple indices and multiple types, eg
+
+    $result = $e->delete_by_query(
+        index   => undef,               # all
+        type    => ['user','tweet'],
+        term    => {user => 'kimchy' }
+    );
+
+See also L</"search()">, L<ElasticSearch::QueryDSL>,
+L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
+and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
 =cut
 
@@ -1408,19 +1426,13 @@ Any documents indexed via this module will be not susceptible to this problem.
 
 =back
 
-=head1 TODO
-
-Currently there are no tests in this module, as testing would require a live
-ElasticSearch server - I plan to add these shortly.
-
 =head1 BUGS
 
 This is an alpha module, so there will be bugs, and the API is likely to
 change in the future, as the API of ElasticSearch itself changes.
 
 If you have any suggestions for improvements, or find any bugs, please report
-them to C<bug-elasticsearch at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=ElasticSearch>.
+them to L<http://github.com/clintongormley/ElasticSearch.pm/issues>.
 I will be notified, and then you'll automatically be notified of progress on
 your bug as I make changes.
 
@@ -1435,6 +1447,10 @@ You can find documentation for this module with the perldoc command.
 You can also look for information at:
 
 =over 4
+
+=item * GitHub
+
+L<http://github.com/clintongormley/ElasticSearch.pm>
 
 =item * RT: CPAN's request tracker
 

@@ -1,5 +1,11 @@
 Revision history for ElasticSearch
 
+0.03    2010-02-21
+      - Corrected the docs for search/count/delete_by_query
+      - Added POD for the Query DSL
+      - Added a SIG{INT} to the test file, so that it shuts down the servers
+        if the test suite is interrupted
+
 0.02    2010-02-21
       - Rewrote the module completely to use a dispatch table -
         makes it easier to extend

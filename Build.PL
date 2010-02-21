@@ -31,7 +31,6 @@ INSTALL
     $install_es = $answer =~ /i/i;
 }
 
-use Data::Dump qw(pp); pp(scalar $install_es);
 my $builder = Module::Build->new(
                         module_name => 'ElasticSearch',
                         license     => 'perl',

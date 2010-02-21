@@ -50,3 +50,4 @@
 \bElasticSearch-[\d\.\_]+
 ^.includepath$
 ^.project$
+^log$

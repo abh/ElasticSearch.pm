@@ -10,6 +10,9 @@ BEGIN {
 
 diag("Testing ElasticSearch $ElasticSearch::VERSION, Perl $], $^X");
 
+
+    local $SIG{INT} = sub { shutdown_servers(); };
+
 my $es      = connect_to_es();
 my $Index   = $ENV{ES_INDEX} || 'es_test';
 my $Index_2 = $Index . '_2';
@@ -441,7 +444,7 @@ sub connect_to_es {
             diag "Starting test node $_";
             system( $cmd, '-p', $pid_file->filename );
             sleep 1;
-            open my $pid_fh, '<', $cmd;
+            open my $pid_fh, '<', $pid_file->filename;
             push @PIDs, <$pid_fh>;
         }
         $server = '127.0.0.1:9200';
@@ -455,5 +458,6 @@ sub connect_to_es {
     return $es;
 }
 
-END { kill 9, @PIDs; exit(0); }
+sub shutdown_servers { kill 9, @PIDs; exit(0) }
+END { shutdown_servers() }
 
