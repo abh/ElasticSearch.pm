@@ -24,112 +24,13 @@ use constant {
     CMD_INDEX      => [ index => ONE_REQ ],
     CMD_index_TYPE => [ index => MULTI_ALL, type => ONE_REQ ],
     CMD_index_type => [ index => MULTI_ALL, type => MULTI_BLANK ],
-    CMD_nodes      => [ nodes => MULTI_BLANK ],
+    CMD_nodes      => [ node  => MULTI_BLANK ],
 };
 
-our %Action = (
-
-    ## DOCUMENT MANAGEMENT
-    index => { cmd => CMD_INDEX_TYPE_id,
-               qs  => {create  => [ 'boolean',  'opType=create' ],
-                       timeout => [ 'duration', 'timeout' ],
-               },
-               data => 'data'
-    },
-
-    get => { cmd => CMD_INDEX_TYPE_ID },
-
-    delete => { method => 'DELETE',
-                cmd    => CMD_INDEX_TYPE_ID,
-    },
-
-    ## QUERIES
-    search => { cmd  => CMD_index_type,
-                data => 'query'
-    },
-
-    delete_by_query => { method  => 'DELETE',
-                         cmd     => CMD_index_type,
-                         postfix => '_query',
-                         data    => 'query'
-    },
-
-    count => { cmd    => CMD_index_type,
-               postfi => '_count',
-               data   => 'query'
-    },
-
-    ## INDEX MANAGEMENT
-    index_status => { cmd     => CMD_index,
-                      postfix => '_status'
-    },
-
-    create_index => { method  => 'PUT',
-                      cmd     => CMD_INDEX,
-                      postfix => '',
-                      data    => ['defn']
-    },
-
-    delete_index => { method  => 'DELETE',
-                      cmd     => CMD_INDEX,
-                      postfix => ''
-    },
-
-    flush_index => { method  => 'POST',
-                     cmd     => CMD_index,
-                     postfix => '_flush',
-                     qs      => { refresh => [ 'boolean', 'refresh=1' ] },
-    },
-
-    refresh_index => { method  => 'POST',
-                       cmd     => CMD_index,
-                       postfix => '_refresh'
-    },
-
-    optimize_index => {
-                    method  => 'POST',
-                    cmd     => CMD_index,
-                    postfix => '_optimize',
-                    qs      => {
-                        only_deletes => [ 'boolean', 'onlyExpungeDeletes=1' ],
-                        refresh      => [ 'boolean', 'refresh=1' ],
-                        flush        => [ 'boolean', 'flush=1' ]
-                    },
-    },
-
-    snapshot_index => { method  => 'POST',
-                        cmd     => CMD_index,
-                        postfix => '_gateway/snapshot'
-    },
-
-    gateway_snapshot => { method  => 'POST',
-                          cmd     => CMD_index,
-                          postfix => '_gateway/snapshot'
-    },
-
-    create_mapping => { method  => 'PUT',
-                        cmd     => CMD_index_TYPE,
-                        postfix => '_mapping',
-                        data    => { properties => 'properties' }
-    },
-
-    ## CLUSTER MANAGEMENT
-    cluster_state => { prefix => '_cluster/state' },
-
-    nodes => { prefix => '_cluser/nodes',
-               cmd    => CMD_nodes,
-               qs     => { settings => [ 'boolean', 'settings=1' ] }
-    },
-);
-
-## Add 'create' action
-$Action{create} = { %{ $Action{index} }, action => 'create' };
-$Action{create}{qs}
-    = { %{ $Action{index}{qs} }, create => [ 'fixed', 'opType=create' ] };
-
-our %QS_Format = ( boolean  => '1 | 0',
-                   duration => "'5m' | '10s'",
-                   fixed    => ''
+our %QS_Format = ( boolean     => '1 | 0',
+                   duration    => "'5m' | '10s'",
+                   search_type => "(dfs_)query_(then|and)_fetch'",
+                   fixed       => ''
 );
 
 our %QS_Formatter = (
@@ -141,7 +42,156 @@ our %QS_Formatter = (
         return "$k=$t" if $t =~ /^[\d+][smh]$/i;
         die "$k '$t' is not in the form $QS_Format{duration}\n";
     },
+    search_type => sub {
+        my $t = shift;
+        return unless defined $t;
+        die "searchType '$t' is not in the form $QS_Format{search_type}\n"
+            unless $t =~ /^(dfs_)?query_(then|and)_fetch$/;
+        return "searchType=$t";
+    }
 );
+
+our %TemplateDfn = (
+    Index => {
+        cmd => CMD_INDEX_TYPE_id,
+        qs  => {create  => [ 'boolean',  'opType=create' ],
+                timeout => [ 'duration', 'timeout' ],
+        },
+        data  => 'data',
+        fixup => sub {
+            my ( $self, $defn, $params ) = @_;
+            $defn->{method} = $params->{id} ? 'PUT' : 'POST';
+        },
+    },
+
+    Search => { cmd     => CMD_index_type,
+                postfix => '_search',
+                qs      => { search_type => ['search_type'], },
+                fixup   => sub { $_[2]->{explain} = \1 if $_[2]->{explain} },
+                data    => {
+                          query   => ['query'],
+                          facets  => ['facets'],
+                          from    => ['from'],
+                          size    => ['size'],
+                          explain => ['explain'],
+                          fields  => ['fields'],
+                          'sort'  => ['sort'],
+                }
+    },
+
+    Query => { term          => ['term'],
+               range         => ['range'],
+               prefix        => ['prefix'],
+               wildcard      => ['wildcard'],
+               matchAll      => [ 'match_all', 'matchAll' ],
+               queryString   => [ 'query_string', 'queryString' ],
+               bool          => ['bool'],
+               disMax        => [ 'dis_max', 'disMax' ],
+               constantScore => [ 'constant_score', 'constantScore' ],
+               filteredQuery => [ 'filtered_query', 'filteredQuery' ]
+    }
+);
+
+our %Action = (
+
+    ## DOCUMENT MANAGEMENT
+    'get'    => { cmd => CMD_INDEX_TYPE_ID },
+    'index'  => $TemplateDfn{Index},
+    'set'    => $TemplateDfn{Index},
+    'create' => { %{ $TemplateDfn{Index} },
+                  qs => { create  => [ 'fixed',    'opType=create' ],
+                          timeout => [ 'duration', 'timeout' ],
+                  },
+    },
+
+    'delete' => { method => 'DELETE',
+                  cmd    => CMD_INDEX_TYPE_ID,
+    },
+
+    ## QUERIES
+    'search'          => $TemplateDfn{Search},
+    'delete_by_query' => { %{ $TemplateDfn{Search} },
+                           method  => 'DELETE',
+                           postfix => '_query',
+                           data    => $TemplateDfn{Query},
+    },
+    'count' => { %{ $TemplateDfn{Search} },
+                 postfix => '_count',
+                 data    => $TemplateDfn{Query},
+    },
+
+    ## INDEX MANAGEMENT
+    'index_status' => { cmd     => CMD_index,
+                        postfix => '_status'
+    },
+
+    'create_index' => { method  => 'PUT',
+                        cmd     => CMD_INDEX,
+                        postfix => '',
+                        data    => { index => ['defn'] },
+    },
+
+    'delete_index' => { method  => 'DELETE',
+                        cmd     => CMD_INDEX,
+                        postfix => ''
+    },
+
+    'flush_index' => { method  => 'POST',
+                       cmd     => CMD_index,
+                       postfix => '_flush',
+                       qs => { refresh => [ 'boolean', 'refresh=true' ] },
+    },
+
+    'refresh_index' => { method  => 'POST',
+                         cmd     => CMD_index,
+                         postfix => '_refresh'
+    },
+
+    'optimize_index' => {
+                 method  => 'POST',
+                 cmd     => CMD_index,
+                 postfix => '_optimize',
+                 qs      => {
+                     only_deletes => [ 'boolean', 'onlyExpungeDeletes=true' ],
+                     refresh      => [ 'boolean', 'refresh=true' ],
+                     flush        => [ 'boolean', 'flush=true' ]
+                 },
+    },
+
+    'snapshot_index' => { method  => 'POST',
+                          cmd     => CMD_index,
+                          postfix => '_gateway/snapshot'
+    },
+
+    'gateway_snapshot' => { method  => 'POST',
+                            cmd     => CMD_index,
+                            postfix => '_gateway/snapshot'
+    },
+
+    'create_mapping' => { method  => 'PUT',
+                          cmd     => CMD_index_TYPE,
+                          postfix => '_mapping',
+                          qs      => { timeout => [ 'duration', 'timeout' ] },
+                          data => { properties => 'properties' }
+    },
+
+    ## CLUSTER MANAGEMENT
+    'cluster_state' => { prefix => '_cluster/state' },
+
+    'nodes' => { prefix => '_cluster/nodes',
+                 cmd    => CMD_nodes,
+                 qs     => { settings => [ 'boolean', 'settings=true' ] }
+    },
+);
+
+# Setup action subs
+{
+    no strict 'refs';
+    for my $action ( keys %Action ) {
+        *{$action} = sub { shift->_do_action( $action, @_ ) }
+
+    }
+}
 
 #===================================
 sub new {
@@ -157,92 +207,40 @@ sub new {
 }
 
 #===================================
-sub index {
-#===================================
-    my ( $self, $params ) = &_params;
-    my $action = delete $params->{_action} || 'index';
-    $self->_do_action( {  %{ $Action{index} },
-                          action => $action,
-                          method => $params->{id} ? 'PUT' : 'POST',
-                       },
-                       $params,
-    );
-}
-
-#===================================
-sub set {
-#===================================
-    my ( $self, $params ) = &_params;
-    $params->{_action} = 'set';
-    return $self->index($params);
-}
-#===================================
-sub create {
-#===================================
-    my ( $self, $params ) = &_params;
-    $self->_do_action( {  %{ $Action{create} },
-                          method => $params->{id} ? 'PUT' : 'POST',
-                       },
-                       $params,
-    );
-}
-
-#===================================
-sub get              { shift->_default_action( 'get',              @_ ) }
-sub delete           { shift->_default_action( 'delete',           @_ ) }
-sub delete_by_query  { shift->_default_action( 'delete_by_query',  @_ ) }
-sub count            { shift->_default_action( 'count',            @_ ) }
-sub search           { shift->_default_action( 'search',           @_ ) }
-sub index_status     { shift->_default_action( 'index_status',     @_ ) }
-sub create_index     { shift->_default_action( 'create_index',     @_ ) }
-sub delete_index     { shift->_default_action( 'delete_index',     @_ ) }
-sub flush_index      { shift->_default_action( 'flush_index',      @_ ) }
-sub refresh_index    { shift->_default_action( 'refresh_index',    @_ ) }
-sub optimize_index   { shift->_default_action( 'optimize_index',   @_ ) }
-sub snapshot_index   { shift->_default_action( 'snapshot_index',   @_ ) }
-sub gateway_snapshot { shift->_default_action( 'gateway_snapshot', @_ ) }
-sub create_mapping   { shift->_default_action( 'create_mapping',   @_ ) }
-sub cluster_state    { shift->_default_action( 'cluster_state',    @_ ) }
-sub nodes            { shift->_default_action( 'nodes',            @_ ) }
-#===================================
-
-#===================================
-sub _default_action {
-#===================================
-    my $self   = shift;
-    my $action = shift;
-    my $params = ref $_[0] ? shift : {@_};
-    my $dfn    = $Action{$action}
-        or $self->throw( 'Internal', "Unknown action '$action'" );
-    $dfn->{action} = $action;
-    $self->_do_action( $dfn, $params );
-}
-
-#===================================
 sub _do_action {
 #===================================
-    my ( $self, $dfn, $params ) = @_;
+    my $self            = shift;
+    my $action          = shift || '';
+    my $original_params = $self->_params(@_);
+
+    my $defn = $Action{$action}
+        or $self->throw( 'Internal', "Unknown action '$action'" );
 
     my ( $cmd, $data, $error );
 
+    my $params = {%$original_params};
+    if ( my $fixup = $defn->{fixup} ) {
+        $fixup->( $self, $defn, $params );
+    }
     eval {
         $cmd = join '',
             grep {defined}
-            $self->_build_cmd( $params, @{$dfn}{qw(prefix cmd postfix)} ),
-            $self->_build_qs( $params, $dfn->{qs} );
+            $self->_build_cmd( $params, @{$defn}{qw(prefix cmd postfix)} ),
+            $self->_build_qs( $params, $defn->{qs} );
 
-        $data = $self->_build_data( $params, $dfn->{data} );
-
+        $data = $self->_build_data( $params, $defn->{data} );
+        die "Unknown parameters: " . join( ', ', keys %$params ) . "\n"
+            if keys %$params;
         1;
     } or $error = $@ || 'Unknown error';
 
     $self->throw( 'Param',
-                  $error . $self->_usage($dfn),
-                  { params => $params } )
+                  $error . $self->_usage( $action, $defn ),
+                  { params => $original_params } )
         if $error;
 
     return
-        $self->request( { method => $dfn->{method} || 'GET',
+        $self->request( { method => $defn->{method} || 'GET',
                           cmd    => $cmd,
                           data   => $data,
                         }
@@ -252,10 +250,12 @@ sub _do_action {
 #===================================
 sub _usage {
 #===================================
-    my $self  = shift;
-    my $dfn   = shift;
-    my $usage = "Usage for '$dfn->{action}()':\n";
-    my @cmd   = @{ $dfn->{cmd} };
+    my $self   = shift;
+    my $action = shift;
+    my $defn   = shift;
+
+    my $usage = "Usage for '$action()':\n";
+    my @cmd = @{ $defn->{cmd} || [] };
     while ( my $key = shift @cmd ) {
         my $type = shift @cmd;
         my $arg_format
@@ -267,7 +267,7 @@ sub _usage {
         $usage .= sprintf( "  - %-15s =>  %-45s # %s\n",
                            $key, $arg_format, $required );
     }
-    if ( my $qs = $dfn->{qs} ) {
+    if ( my $qs = $defn->{qs} ) {
         for ( sort keys %$qs ) {
             my $arg_format = $QS_Format{ $qs->{$_}[0] };
             $usage .= sprintf( "  - %-15s =>  %-45s # optional\n", $_,
@@ -275,8 +275,8 @@ sub _usage {
         }
     }
 
-    if ( my $data = $dfn->{data} ) {
-        $data = { data => $data } unless ref $data;
+    if ( my $data = $defn->{data} ) {
+        $data = { data => $data } unless ref $data eq 'HASH';
         my @keys = sort { $a->[0] cmp $b->[0] }
             map { ref $_ ? [ $_->[0], 'optional' ] : [ $_, 'required' ] }
             values %$data;
@@ -295,16 +295,16 @@ sub _build_qs {
 #===================================
     my $self   = shift;
     my $params = shift;
-    my $dfn    = shift or return;
+    my $defn   = shift or return;
     my @qs;
-    foreach my $key ( keys %$dfn ) {
-        my ( $format_name, @args ) = @{ $dfn->{$key} || [] };
+    foreach my $key ( keys %$defn ) {
+        my ( $format_name, @args ) = @{ $defn->{$key} || [] };
         $format_name ||= '';
 
         my $formatter = $QS_Formatter{$format_name}
             or die "Unknown QS formatter '$format_name'";
 
-        my $val = $formatter->( $params->{$key}, @args );
+        my $val = $formatter->( delete $params->{$key}, @args );
         push @qs, $val if defined $val;
     }
     return unless @qs;
@@ -316,30 +316,35 @@ sub _build_data {
 #===================================
     my $self   = shift;
     my $params = shift;
-    my $dfn    = shift or return;
+    my $defn   = shift or return;
 
     my $top_level;
-    if ( ref $dfn ne 'HASH' ) {
+    if ( ref $defn ne 'HASH' ) {
         $top_level = 1;
-        $dfn = { data => $dfn };
+        $defn = { data => $defn };
     }
 
     my %data;
-KEY: while ( my ( $key, $source ) = each %$dfn ) {
+KEY: while ( my ( $key, $source ) = each %$defn ) {
         if ( ref $source eq 'ARRAY' ) {
             foreach (@$source) {
-                my $val = $params->{$_};
+                my $val = delete $params->{$_};
                 next unless defined $val;
                 $data{$key} = $val;
                 next KEY;
             }
         }
         else {
-            $data{$key} = $params->{$source}
+            $data{$key} = delete $params->{$source}
                 or die "Missing required param '$source'\n";
         }
     }
-    return $top_level ? $data{data} : \%data;
+    if ($top_level) {
+        die "Param '$defn' is not a HASH ref"
+            unless ref $data{data} eq 'HASH';
+        return $data{data};
+    }
+    return \%data;
 }
 
 #===================================
@@ -347,15 +352,15 @@ sub _build_cmd {
 #===================================
     my $self   = shift;
     my $params = shift;
-    my ( $prefix, $dfn, $postfix ) = @_;
+    my ( $prefix, $defn, $postfix ) = @_;
 
-    my @dfn = (@$dfn);
+    my @defn = ( @{ $defn || [] } );
     my @cmd;
-    while (@dfn) {
-        my $key  = shift @dfn;
-        my $type = shift @dfn;
+    while (@defn) {
+        my $key  = shift @defn;
+        my $type = shift @defn;
 
-        my $val = $params->{$key};
+        my $val = delete $params->{$key};
         if ( defined $val ) {
             if ( ref $val eq 'ARRAY' ) {
                 die "'$key' must be a single value\n"
@@ -404,7 +409,7 @@ sub refresh_servers {
         last if @live_servers;
     }
     $self->throw( 'NoServers',
-                  "Could not retrieve a list of active servers",
+                  "Could not retrieve a list of active servers: $@",
                   { servers => \@servers } )
         unless @live_servers;
     for (@live_servers) {
@@ -503,12 +508,13 @@ sub _request {
     my $method         = shift;
     my $cmd            = shift;
     my $data           = shift;
+
     my $request = HTTP::Request->new( $method, $current_server . $cmd );
 
     $request->add_content_utf8($data)
         if defined $data;
-    use Data::Dump qw(pp);
-    pp( { cmd => $cmd, data => $data } );
+
+    $self->_log_request( $method, $current_server, $cmd, $data );
 
     my $server_response = $self->ua->request($request);
 
@@ -518,6 +524,8 @@ sub _request {
     my ( $result, $json_error );
     eval { $result = $self->JSON->decode($content); 1 }
         or $json_error = ( $@ || 'Unknown JSON error' );
+
+    $self->_log_result( $result || $content );
 
     my $success = $server_response->is_success;
 
@@ -546,6 +554,43 @@ sub _request {
     }
 
     $self->throw( $error_type, $error_msg, $error_params );
+}
+
+#===================================
+sub _log_request {
+#===================================
+    my $self = shift;
+    my $log = $self->trace_calls or return;
+    my ( $method, $current_server, $cmd, $data ) = @_;
+    if ( defined $data ) {
+        $data =~ s/'/\\u0027/g;
+        $data = " -d '\n${data}'";
+    }
+    else {
+        $data = '';
+    }
+    print $log "curl -X${method} '${current_server}${cmd}' ${data}\n";
+
+}
+
+#===================================
+sub _log_result {
+#===================================
+    my $self    = shift;
+    my $log     = $self->trace_calls or return;
+    my $content = shift;
+    my $out     = ref $content ? $self->JSON->encode($content) : $content;
+    my @lines   = split /\n/, $out;
+    while (@lines) {
+        my $line = shift @lines;
+        if ( length $line > 65 ) {
+            my ($spaces) = ( $line =~ /^(\s*)/ );
+            unshift @lines, '> ' . $spaces . substr( $line, 65 );
+            $line = substr $line, 0, 65;
+        }
+        print $log "# $line\n";
+    }
+    print $log "\n\n";
 }
 
 #===================================
@@ -616,6 +661,30 @@ sub debug {
 }
 
 #===================================
+sub trace_calls {
+#===================================
+    my $self = shift;
+    if (@_) {
+        if ( my $file = shift ) {
+            $file = '&STDERR' if $file eq "1";
+
+            open my $fh, ">$file"
+                or $self->throw( 'Internal',
+                              "Couldn't open '$file' for trace logging: $!" );
+            binmode( $fh, ':utf8' );
+            $fh->autoflush(1);
+            $self->JSON->pretty(1);
+            $self->{_trace_file} = $fh;
+        }
+        else {
+            $self->{_trace_file} = undef;
+            $self->JSON->pretty(0);
+        }
+    }
+    return $self->{_trace_file};
+}
+
+#===================================
 #===================================
 package ElasticSearch::Error;
 #===================================
@@ -658,7 +727,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.01 - this is an alpha release
+Version 0.02 - this is an alpha release
 
 =cut
 
@@ -685,7 +754,11 @@ a randomly chosen node in the list.
 
 
     use ElasticSearch;
-    my $e = ElasticSearch->new( servers => 'search.foo.com', debug => 1 );
+    my $e = ElasticSearch->new(
+        servers     => 'search.foo.com',
+        debug       => 1,
+        trace_calls => 'log_file',
+    );
 
     $e->index(
         index => 'twitter',
@@ -908,12 +981,50 @@ Example:
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete>
 
+=cut
+
+=head2 Query commands
+
+=head3 C<search()>
+
+    $result = $e->search(
+        index           => multi,
+        type            => multi,
+        bool            =>  {bool query}                # optional
+        constant_score  =>  {constant_score query}      # optional
+        dis_max         =>  {dis_max query}             # optional
+        explain         =>  {explain query}             # optional
+        facet           =>  {facet query}               # optional
+        fields          =>  {fields query}              # optional
+        filtered_query  =>  {filtered_query query}      # optional
+        from            =>  {from query}                # optional
+        query           =>  {query query}               # optional
+        query_string    =>  {query_string query}        # optional
+        search_type     =>  {search_type query}         # optional
+        size            =>  {size query}                # optional
+        sort            =>  {sort query}                # optional
+    );
+
+Searches for all documents matching the query. Documents can be matched
+against multiple indices and multiple types, eg:
+
+    $result = $e->search(
+        index   => undef,               # all
+        type    => ['user','tweet'],
+        query   => { term => {user => 'kimchy' }}
+    );
+
+For all of the options that can be included in the C<query> parameter, see
+L<http://www.elasticsearch.com/docs/elasticsearch/json_api/search> and
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
+
+
 =head3 C<delete_by_query()>
 
     $result = $e->delete_by_query(
         index   => multi,
         type    => multi,
-        query   => {...}
+        query   => {...}        # see search() for all options
     );
 
 Deletes any documents matching the query. Documents can be matched against
@@ -933,7 +1044,8 @@ See also L</"search()">,
     $result = $e->count(
         index   => multi,
         type    => multi,
-        query   => {...}
+        query   => {...}        # see search() for all options
+
     );
 
 Counts the number of documents matching the query. Documents can be matched
@@ -947,27 +1059,6 @@ against multiple indices and multiple types, eg
 
 See also L</"search()">,
          L<http://www.elasticsearch.com/docs/elasticsearch/json_api/count>
-
-=head3 C<search()>
-
-    $result = $e->search(
-        index   => multi,
-        type    => multi,
-        query   => {...}
-    );
-
-Searches for all documents matching the query. Documents can be matched
-against multiple indices and multiple types, eg:
-
-    $result = $e->search(
-        index   => undef,               # all
-        type    => ['user','tweet'],
-        query   => { term => {user => 'kimchy' }}
-    );
-
-For all of the options that can be included in the C<query> parameter, see
-L<http://www.elasticsearch.com/docs/elasticsearch/json_api/search>
-
 
 =cut
 
@@ -1089,6 +1180,7 @@ C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
         index       => multi,
         type        => single,
         properties  => { ... }      # required
+        timeout     => '5m' | '10s' # optional
     );
 
 A C<mapping> is the data definition of a C<type>.  If no mapping has been
@@ -1257,6 +1349,42 @@ stacktrace.
     $e->debug(1|0);
 
 If C<debug()> is C<true>, then exceptions include a stack trace.
+
+=head3 C<trace_calls()>
+
+    $es->trace_calls(1);            # log to STDERR
+    $es->trace_calls($filename);    # log to $filename
+    $es->trace_calls(0 | undef);    # disable logging
+
+C<trace_calls()> is used for debugging.  All requests to the cluster
+are logged either to C<STDERR> or the specified file, in a form that can
+be rerun with curl.
+
+The cluster response will also be logged, and commented out.
+
+Example: C<< $e->nodes() >> is logged as:
+
+    curl -XGET http://127.0.0.1:9200/_cluster/nodes
+    # {
+    #    "clusterName" : "elasticsearch",
+    #    "nodes" : {
+    #       "getafix-24719" : {
+    #          "httpAddress" : "inet[/127.0.0.2:9200]",
+    #          "dataNode" : true,
+    #          "transportAddress" : "inet[getafix.traveljury.com/127.0.
+    # >         0.2:9300]",
+    #          "name" : "Sangre"
+    #       },
+    #       "getafix-17782" : {
+    #          "httpAddress" : "inet[/127.0.0.2:9201]",
+    #          "dataNode" : true,
+    #          "transportAddress" : "inet[getafix.traveljury.com/127.0.
+    # >         0.2:9301]",
+    #          "name" : "Williams, Eric"
+    #       }
+    #    }
+    # }
+
 
 =cut
 
