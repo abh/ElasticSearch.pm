@@ -6,10 +6,9 @@ use LWP::UserAgent();
 use LWP::ConnCache();
 use HTTP::Request();
 use JSON::XS();
-use Data::Dump qw(pp);
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use constant { ONE_REQ     => 1,
                ONE_OPT     => 2,
@@ -22,6 +21,7 @@ use constant {
     CMD_INDEX_TYPE_id => [ index => ONE_REQ, type => ONE_REQ, id => ONE_OPT ],
     CMD_index      => [ index => MULTI_BLANK ],
     CMD_INDEX      => [ index => ONE_REQ ],
+    CMD_INDEX_type => [ index => ONE_REQ, type => MULTI_BLANK ],
     CMD_index_TYPE => [ index => MULTI_ALL, type => ONE_REQ ],
     CMD_index_type => [ index => MULTI_ALL, type => MULTI_BLANK ],
     CMD_nodes      => [ node  => MULTI_BLANK ],
@@ -30,7 +30,12 @@ use constant {
 our %QS_Format = ( boolean     => '1 | 0',
                    duration    => "'5m' | '10s'",
                    search_type => "(dfs_)query_(then|and)_fetch'",
-                   fixed       => ''
+                   fixed       => '',
+                   optional    => "'scalar value'",
+                   flatten     => "'scalar' or ['scalar_1', 'scalar_n']",
+                   'int'       => "integer",
+                   'string'    => '"string"',
+                   term_sort   => 'term|freq',
 );
 
 our %QS_Formatter = (
@@ -48,7 +53,31 @@ our %QS_Formatter = (
         die "searchType '$t' is not in the form $QS_Format{search_type}\n"
             unless $t =~ /^(dfs_)?query_(then|and)_fetch$/;
         return "searchType=$t";
-    }
+    },
+    flatten => sub {
+        my $array = shift or return;
+        my $key = shift;
+        return "$key=" . ( ref $array ? join( ',', @$array ) : $array );
+    },
+    'int' => sub {
+        my $int = shift;
+        return unless defined $int;
+        my $key = shift;
+        eval { $int += 0; 1 } or die "'$key' is not an integer";
+        return $key . '=' . $int;
+    },
+    'string' => sub {
+        my $string = shift;
+        return unless defined $string;
+        return shift() . '=' . $string;
+    },
+    'term_sort' => sub {
+        my $sort = shift or return;
+        die "'sort' must be one of 'term' or 'freq'"
+            unless $sort =~ /^(term|freq)$/;
+        return 'sort=' . $sort;
+    },
+
 );
 
 our %TemplateDfn = (
@@ -57,26 +86,27 @@ our %TemplateDfn = (
         qs  => {create  => [ 'boolean',  'opType=create' ],
                 timeout => [ 'duration', 'timeout' ],
         },
-        data  => 'data',
-        fixup => sub {
+        data         => 'data',
+        fixup_params => sub {
             my ( $self, $defn, $params ) = @_;
             $defn->{method} = $params->{id} ? 'PUT' : 'POST';
         },
     },
 
-    Search => { cmd     => CMD_index_type,
-                postfix => '_search',
-                qs      => { search_type => ['search_type'], },
-                fixup   => sub { $_[2]->{explain} = \1 if $_[2]->{explain} },
-                data    => {
-                          query   => ['query'],
-                          facets  => ['facets'],
-                          from    => ['from'],
-                          size    => ['size'],
-                          explain => ['explain'],
-                          fields  => ['fields'],
-                          'sort'  => ['sort'],
-                }
+    Search => {
+            cmd          => CMD_index_type,
+            postfix      => '_search',
+            qs           => { search_type => ['search_type'], },
+            fixup_params => sub { $_[2]->{explain} = \1 if $_[2]->{explain} },
+            data         => {
+                      query   => ['query'],
+                      facets  => ['facets'],
+                      from    => ['from'],
+                      size    => ['size'],
+                      explain => ['explain'],
+                      fields  => ['fields'],
+                      'sort'  => ['sort'],
+            }
     },
 
     Query => { term          => ['term'],
@@ -118,6 +148,29 @@ our %Action = (
     'count' => { %{ $TemplateDfn{Search} },
                  postfix => '_count',
                  data    => $TemplateDfn{Query},
+    },
+    'terms' => {
+        cmd          => CMD_index,
+        postfix      => '_terms',
+        fixup_params => sub {
+            my ( $self, $defn, $params ) = @_;
+            $self->throw( 'Param', "'fields' is a required value" )
+                unless $params->{fields};
+            $params->{exclude_to} ||= 0,;
+        },
+        qs => { 'fields'       => [ 'flatten', 'fields' ],
+                'from'         => [ 'string',  'from' ],
+                'to'           => [ 'string',  'to' ],
+                'exclude_from' => [ 'boolean', 'fromInclusive=false' ],
+                'exclude_to' =>
+                    [ 'boolean', 'toInclusive=false', 'toInclusive=true' ],
+                'prefix'   => [ 'string', 'prefix' ],
+                'regexp'   => [ 'string', 'regexp' ],
+                'min_freq' => [ 'int',    'minFreq' ],
+                'max_freq' => [ 'int',    'maxFreq' ],
+                'size'     => [ 'int',    'size' ],
+                'sort'     => ['term_sort'],
+        }
     },
 
     ## INDEX MANAGEMENT
@@ -168,11 +221,25 @@ our %Action = (
                             postfix => '_gateway/snapshot'
     },
 
-    'create_mapping' => { method  => 'PUT',
-                          cmd     => CMD_index_TYPE,
-                          postfix => '_mapping',
-                          qs      => { timeout => [ 'duration', 'timeout' ] },
-                          data => { properties => 'properties' }
+    'put_mapping' => { method  => 'PUT',
+                       cmd     => CMD_index_TYPE,
+                       postfix => '_mapping',
+                       qs      => {
+                               timeout           => [ 'duration', 'timeout' ],
+                               ignore_duplicates => [
+                                     'boolean', 'ignoreDuplicates=true',
+                                     'ignoreDuplicates=false'
+                               ]
+                       },
+                       data => { properties => 'properties' }
+    },
+    'get_mapping' => {
+        prefix        => '_cluster/state',
+        cmd           => CMD_INDEX_type,
+        fixup_request => sub {
+            $_[2] = '/_cluster/state'    # reset cmd
+        },
+        fixup_response => \&_get_mapping
     },
 
     ## CLUSTER MANAGEMENT
@@ -219,7 +286,7 @@ sub _do_action {
     my ( $cmd, $data, $error );
 
     my $params = {%$original_params};
-    if ( my $fixup = $defn->{fixup} ) {
+    if ( my $fixup = $defn->{fixup_params} ) {
         $fixup->( $self, $defn, $params );
     }
     eval {
@@ -234,17 +301,24 @@ sub _do_action {
         1;
     } or $error = $@ || 'Unknown error';
 
+    if ( my $fixup = $defn->{fixup_request} ) {
+        $fixup->( $self, $original_params, $cmd, $data );
+    }
     $self->throw( 'Param',
                   $error . $self->_usage( $action, $defn ),
                   { params => $original_params } )
         if $error;
 
-    return
+    my $response =
         $self->request( { method => $defn->{method} || 'GET',
                           cmd    => $cmd,
                           data   => $data,
                         }
         );
+    if ( my $fixup = $defn->{fixup_response} ) {
+        $fixup->( $self, $original_params, $response );
+    }
+    return $response;
 }
 
 #===================================
@@ -378,6 +452,31 @@ sub _build_cmd {
     }
 
     return join '/', '', grep {defined} ( $prefix, @cmd, $postfix );
+}
+
+## fixes up the return value for get_mapping
+#===================================
+sub _get_mapping {
+#===================================
+    my ( $self, $params, $response ) = @_;
+    my ( $index, $type ) = @{$params}{qw(index type)};
+
+    my $source = $response->{metadata}{indices}{$index}{mappings}
+        or return;
+    my $json = $self->JSON;
+    my @types = ! $type ? keys %$source
+        : ref $type eq 'ARRAY' ? @$type
+        : $type;
+
+    my %mappings;
+    for (@types) {
+        my $val = $source->{$_}{source} or next;
+        my ($key,$mapping)= %{$json->decode($val)};
+        $mappings{$key} = $mapping;
+    }
+    $_[2] = $type && ! ref $type
+        ? $mappings{$type}
+        : \%mappings;
 }
 
 #===================================
@@ -699,7 +798,7 @@ use strict;
 use warnings FATAL => 'all', NONFATAL => 'redefine';
 
 use overload ( '""' => 'stringify' );
-use Data::Dump qw(pp);
+use Data::Dumper;
 
 #===================================
 sub stringify {
@@ -715,7 +814,7 @@ sub stringify {
         . $error->{-line} . " : \n"
         . ( $error->{-text} || 'Missing error message' ) . "\n"
         . ( $error->{-vars}
-            ? "With vars:\n" . pp( $error->{-vars} ) . "\n"
+            ? "With vars:\n" . Dumper( $error->{-vars} ) . "\n"
             : ''
         ) . $error->{-stacktrace};
     return $msg;
@@ -789,7 +888,13 @@ a randomly chosen node in the list.
 
 =head1 GETTING ElasticSearch
 
-You can download the latest release from
+To get the latest version from github, you can just install
+L<Alien::ElasticSearch>, or if you already have it installed, then try:
+
+    use Alien::ElasticSearch;;
+    Alien::ElasticSearch->update_from_git;
+
+Alternatively, you can download the latest release from
 L<http://www.elasticsearch.com/download/>, or to build from source on Unix:
 
     cd ~
@@ -923,7 +1028,7 @@ to exists in the index.
 =back
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/index>
-and L</"create_mapping()">
+and L</"put_mapping()">
 
 
 =head3 C<set()>
@@ -1078,6 +1183,38 @@ See also L</"search()">, L<ElasticSearch::QueryDSL>,
 L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
 and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
+
+=head3 C<terms()>
+
+    $terms = $e->terms(
+        index           => multi,
+        fields          => 'field' | [field1..],   # required
+        min_freq        =>  integer,               # optional
+        max_freq        =>  integer,               # optional
+        size            =>  integer,               # optional
+        sort            =>  term (default) | freq  # optional
+
+        ## A range of terms eg alpha - omega
+        from            => 'first term',           # optional
+        to              => 'last term',            # optional
+        exclude_from    => 1 | 0,                  # exclude 'from' term
+        exclude_to      => 1 | 0,                  # exclude 'to' term
+
+        prefix          => 'prefix',               # terms starting with
+        regexp          => 'regexp',               # terms matching ^regexp$
+    );
+
+Get terms (from one or more indices) and the number of times those terms
+appear in a document.  Useful for generating tag clouds or for auto-suggestion.
+
+eg:
+
+    $terms = $e->terms(
+        index       => 'twitter',
+        fields      => ['tweet','reply'],
+        prefix      => 'arnol'
+    )
+
 =cut
 
 =head2 Index Admin methods
@@ -1192,13 +1329,14 @@ C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
         refresh         => 1 | 0,  # refresh after optmization
     )
 
-=head3 C<create_mapping()>
+=head3 C<put_mapping()>
 
-    $result = $e->create_mapping(
-        index       => multi,
-        type        => single,
-        properties  => { ... }      # required
-        timeout     => '5m' | '10s' # optional
+    $result = $e->put_mapping(
+        index               => multi,
+        type                => single,
+        properties          => { ... }      # required
+        timeout             => '5m' | '10s' # optional,
+        ignore_duplicates   => 1 | 0,       # optional
     );
 
 A C<mapping> is the data definition of a C<type>.  If no mapping has been
@@ -1212,7 +1350,7 @@ document, by looking at its contents, eg
 However, these heuristics can be confused, so it safer (and much more powerful)
 to specify an official C<mapping> instead, eg:
 
-    $result = $e->create_mapping(
+    $result = $e->put_mapping(
         index   => ['twitter','buzz'],
         type    => 'tweet',
         properties  =>  {
@@ -1224,8 +1362,34 @@ to specify an official C<mapping> instead, eg:
         }
     );
 
-See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/create_mapping>
+NOTE: ElasticSearch sets C<ignoreDuplicates> to C<true> by default.  On the
+basis of don't-fail-silently, I've switched the default to complain if
+a new mapping overwrites an old mapping.  For the default behaviour, set
+C<< ignore_duplicates => 1 >>.
+
+See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/put_mapping>
 and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
+
+=head3 C<get_mapping()>
+
+    $mapping = $e->get_mapping(
+        index       => single,
+        type        => multi
+    );
+
+Returns the mappings for all types in an index, or the mapping for the specified
+type(s), eg:
+
+    $mapping = $e->get_mapping(
+        index       => 'twitter',
+        type        => 'tweet'
+    );
+
+    $mappings = $e->get_mapping(
+        index       => 'twitter',
+        type        => ['tweet','user']
+    );
+    # { tweet => {mapping}, user => {mapping}}
 
 =cut
 
@@ -1413,6 +1577,23 @@ Clinton Gormley, C<< <drtech at cpan.org> >>
 =head1 KNOWN ISSUES
 
 =over
+
+=item   L</"set()">, L<"/index()"> and L<"/create()">
+
+If one of the fields that you are trying to index has the same name as the
+type, then you need change the format as follows:
+
+Instead of:
+
+     $e->set(index=>'twitter', type=>'tweet',
+             data=> { tweet => 'My tweet', date => '2010-01-01' }
+     );
+
+you should include the type name in the data:
+
+     $e->set(index=>'twitter', type=>'tweet',
+             data=> { tweet=> { tweet => 'My tweet', date => '2010-01-01' }}
+     );
 
 =item   L</"get()">
 

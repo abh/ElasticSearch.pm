@@ -10,12 +10,11 @@ BEGIN {
 
 diag("Testing ElasticSearch $ElasticSearch::VERSION, Perl $], $^X");
 
-
-    local $SIG{INT} = sub { shutdown_servers(); };
+local $SIG{INT} = sub { shutdown_servers(); };
 
 my $es      = connect_to_es();
-my $Index   = $ENV{ES_INDEX} || 'es_test';
-my $Index_2 = $Index . '_2';
+my $Index   = 'es_test_1';
+my $Index_2 = 'es_test_2';
 
 SKIP: {
 
@@ -60,8 +59,7 @@ SKIP: {
     }
 
     # drop index in case rerunning test
-    eval { $es->delete_index( index => $Index ) };
-    eval { $es->delete_index( index => $Index_2 ) };
+    drop_indices();
 
     ### CREATE INDEX ###
     ok $es->create_index( index => $Index )->{ok}, 'Created index';
@@ -204,24 +202,48 @@ SKIP: {
         1,
         ' - now only single copy';
 
-    ### CREATE MAPPING ###
-    ok $es->create_mapping(
+    ### PUT MAPPING ###
+    drop_indices();
+
+    ok $es->put_mapping(
            index => [ $Index, $Index_2 ],
            type  => 'test',
            properties =>
                { text => { type => 'string' }, num => { type => 'integer' } },
         ),
-        'Create mappings';
+        'Create mapping';
 
-    $r = $es->cluster_state->{metadata}{indices};
-    is( $r->{$Index}{mappings}{mapping}{name},
-        'test', ' - index 1 mapping name' );
-    like( $r->{$Index}{mappings}{mapping}{value},
-          qr/"text"\s*:\s*{\s*"type"\s*:\s*"string"\s*}/,
-          ' - index 1 string map' );
-    like( $r->{$Index}{mappings}{mapping}{value},
-          qr/"num"\s*:\s*{\s*"type"\s*:\s*"integer"\s*}/,
-          ' - index 1 int map' );
+    isa_ok my $mapping = $es->get_mapping( index => $Index, type => 'test' ),
+        'HASH', ' - index 1 mapping exists';
+
+    is $mapping->{properties}{text}{type}, 'string',  ' - index 1 string map';
+    is $mapping->{properties}{num}{type},  'integer', ' - index 1 int map';
+
+    throws_ok {$es->put_mapping(
+           index => [ $Index, $Index_2 ],
+           type  => 'test',
+           properties =>
+               { text => { type => 'string' }, num => { type => 'integer' } },
+        )} qr/MergeMappingException/,
+        'Error on duplicate mapping';
+
+    ok $es->put_mapping(
+           index => [ $Index, $Index_2 ],
+           type  => 'test_2',
+           properties =>
+               { text => { type => 'string' }, num => { type => 'integer' } },
+        ),
+        'Create second mapping';
+
+    is join ('-',sort keys %{ $es->get_mapping( index => $Index)}),
+        'test-test_2', ' - get all mappings';
+
+    is join ('-',sort keys %{ $es->get_mapping( index => $Index, type=>['test','test_2','test_3'])}),
+        'test-test_2', ' - get list of mappings';
+
+    ok !defined $es->get_mapping( index => $Index, type=>'test_3'),
+        ' - get unknown mapping';
+
 
     ### QUERY TESTS ###
     index_test_docs();
@@ -355,6 +377,36 @@ SKIP: {
                    }
     )->{count}, 8, 'Count: filteredQuery';
 
+SKIP: {
+    ### TERMS
+    skip "Terms queries fail across multiple nodes",14 if @nodes > 1;
+    # add another foo to make the document frequency uneven
+    $es->set(index=>$Index, type => 'type_1', id=>30, data => {text=>'foo'});
+    flush_es();
+
+    isa_ok $r=$es->terms(fields=>'text')->{fields}{text}{terms},'ARRAY',"All terms";
+    is $r->[2]{docFreq},17,' - foo docFreq';
+    is $r->[0]{docFreq},16,' - bar docFreq';
+
+    is $es->terms(index=>$Index,fields=>'text')->{fields}{text}{terms}[2]{docFreq},9, ' - foo on index 1';
+
+    is $es->terms(fields=>'text',min_freq=>17)->{fields}{text}{terms}[0]{term},'foo', ' - minFreq';
+    is $es->terms(fields=>'text',max_freq=>16)->{fields}{text}{terms}[-1]{term},'baz', ' - maxFreq';
+
+    is @{$es->terms(fields=>'text',size => 2)->{fields}{text}{terms}},2, ' - size';
+    is $es->terms(fields=>'text',sort=> 'freq')->{fields}{text}{terms}[0]{term},'foo',' - sort freq';
+
+    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',from=>'baz')->{fields}{text}{terms}}),'baz-foo', ' - from';
+    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',to=>'baz')->{fields}{text}{terms}}),'bar-baz', ' - to';
+
+    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',from=>'baz',exclude_from=>1)->{fields}{text}{terms}}),'foo', ' - exclude_from';
+    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',to=>'baz',exclude_to=>1)->{fields}{text}{terms}}),'bar', ' - exclude_to';
+
+    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',prefix=>'ba')->{fields}{text}{terms}}),'bar-baz', ' - prefix';
+    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',regexp=>'foo|baz')->{fields}{text}{terms}}),'baz-foo', ' - regexp';
+}
+
+
     ###  DELETE_BY_QUERY ###
     ok $es->delete_by_query( term => { text => 'foo' } )->{ok},
         "Delete by query";
@@ -372,26 +424,22 @@ sub index_test_docs {
     ### ADD DOCUMENTS TO TEST QUERIES ###
     diag("Preparing indices for query tests");
 
-    eval {
-        $es->delete_index( index => $Index );
-        $es->delete_index( index => $Index_2 );
-        flush_es();
-    };
+    drop_indices();
 
     $es->create_index( index => $Index );
     $es->create_index( index => $Index_2 );
-    $es->create_mapping( type       => 'type_1',
-                         properties => {
+    $es->put_mapping( type       => 'type_1',
+                      properties => {
                                 text => { type => 'string',  store => 'yes' },
                                 num  => { type => 'integer', store => 'yes' }
-                         },
+                      },
     );
 
-    $es->create_mapping( type       => 'type_2',
-                         properties => {
+    $es->put_mapping( type       => 'type_2',
+                      properties => {
                                 text => { type => 'string',  store => 'yes' },
                                 num  => { type => 'integer', store => 'yes' }
-                         },
+                      },
     );
 
     flush_es();
@@ -420,6 +468,15 @@ sub index_test_docs {
         }
     }
     flush_es();
+
+}
+
+sub drop_indices {
+    eval {
+        $es->delete_index( index => $Index );
+        $es->delete_index( index => $Index_2 );
+        flush_es();
+    };
 
 }
 
