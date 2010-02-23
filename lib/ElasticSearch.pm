@@ -834,7 +834,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.03 - this is an alpha release
+Version 0.04 - this is an alpha release
 
 =cut
 
