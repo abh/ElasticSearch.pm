@@ -219,13 +219,22 @@ SKIP: {
     is $mapping->{properties}{text}{type}, 'string',  ' - index 1 string map';
     is $mapping->{properties}{num}{type},  'integer', ' - index 1 int map';
 
-    throws_ok {$es->put_mapping(
-           index => [ $Index, $Index_2 ],
-           type  => 'test',
-           properties =>
-               { text => { type => 'string' }, num => { type => 'integer' } },
-        )} qr/MergeMappingException/,
-        'Error on duplicate mapping';
+SKIP: {
+        skip
+            "Create duplicate mapping kills clusters with more than one node",
+            1
+            if @nodes > 1;
+        throws_ok {
+            $es->put_mapping( index      => [ $Index, $Index_2 ],
+                              type       => 'test',
+                              properties => { text => { type => 'string' },
+                                              num  => { type => 'integer' }
+                              },
+                              ignore_duplicates => 0,
+            );
+        }
+        qr/MergeMappingException/, 'Error on duplicate mapping';
+    }
 
     ok $es->put_mapping(
            index => [ $Index, $Index_2 ],
@@ -235,15 +244,20 @@ SKIP: {
         ),
         'Create second mapping';
 
-    is join ('-',sort keys %{ $es->get_mapping( index => $Index)}),
+    is join( '-', sort keys %{ $es->get_mapping( index => $Index ) } ),
         'test-test_2', ' - get all mappings';
 
-    is join ('-',sort keys %{ $es->get_mapping( index => $Index, type=>['test','test_2','test_3'])}),
+    is join( '-',
+             sort keys %{
+                 $es->get_mapping( index => $Index,
+                                   type  => [ 'test', 'test_2', 'test_3' ]
+                 )
+                 }
+        ),
         'test-test_2', ' - get list of mappings';
 
-    ok !defined $es->get_mapping( index => $Index, type=>'test_3'),
+    ok !defined $es->get_mapping( index => $Index, type => 'test_3' ),
         ' - get unknown mapping';
-
 
     ### QUERY TESTS ###
     index_test_docs();
@@ -295,28 +309,21 @@ SKIP: {
         ),
         'HASH', "Match text: bar foo";
 
-SKIP: {
+    # FACETS SEARCH
 
-        # FACETS SEARCH
-        skip "Facet search kills clusters with more than one node", 3
-            unless 1;
-
-        # facets search
-
-        isa_ok $r =
-            $es->search(
+    isa_ok $r =
+        $es->search(
                    facets => {
                        bazFacet => { query => { term => { text => 'baz' } } },
                        barFacet => { query => { term => { text => 'bar' } } }
                    },
                    query => { term => { text => 'foo' } }
-            ),
-            'HASH', "Facets search";
+        ),
+        'HASH', "Facets search";
 
-        is $r->{hits}{total},      16, ' - total correct';
-        is $r->{facets}{bazFacet}, 8,  ' - first facet correct';
-        is $r->{facets}{barFacet}, 8,  ' - second facet correct';
-    }
+    is $r->{hits}{total},      16, ' - total correct';
+    is $r->{facets}{bazFacet}, 8,  ' - first facet correct';
+    is $r->{facets}{barFacet}, 8,  ' - second facet correct';
 
     # EXPLAIN SEARCH
     isa_ok $es->search( query => { term => { text => 'foo' } }, explain => 1 )
@@ -378,34 +385,91 @@ SKIP: {
     )->{count}, 8, 'Count: filteredQuery';
 
 SKIP: {
-    ### TERMS
-    skip "Terms queries fail across multiple nodes",14 if @nodes > 1;
-    # add another foo to make the document frequency uneven
-    $es->set(index=>$Index, type => 'type_1', id=>30, data => {text=>'foo'});
-    flush_es();
 
-    isa_ok $r=$es->terms(fields=>'text')->{fields}{text}{terms},'ARRAY',"All terms";
-    is $r->[2]{docFreq},17,' - foo docFreq';
-    is $r->[0]{docFreq},16,' - bar docFreq';
+        ### TERMS
+        skip "Terms queries fail across multiple nodes", 14 if @nodes > 1;
 
-    is $es->terms(index=>$Index,fields=>'text')->{fields}{text}{terms}[2]{docFreq},9, ' - foo on index 1';
+        # add another foo to make the document frequency uneven
+        $es->set( index => $Index,
+                  type  => 'type_1',
+                  id    => 30,
+                  data  => { text => 'foo' }
+        );
+        flush_es();
 
-    is $es->terms(fields=>'text',min_freq=>17)->{fields}{text}{terms}[0]{term},'foo', ' - minFreq';
-    is $es->terms(fields=>'text',max_freq=>16)->{fields}{text}{terms}[-1]{term},'baz', ' - maxFreq';
+        isa_ok $r= $es->terms( fields => 'text' )->{fields}{text}{terms},
+            'ARRAY', "All terms";
+        is $r->[2]{docFreq}, 17, ' - foo docFreq';
+        is $r->[0]{docFreq}, 16, ' - bar docFreq';
 
-    is @{$es->terms(fields=>'text',size => 2)->{fields}{text}{terms}},2, ' - size';
-    is $es->terms(fields=>'text',sort=> 'freq')->{fields}{text}{terms}[0]{term},'foo',' - sort freq';
+        is $es->terms( index => $Index, fields => 'text' )
+            ->{fields}{text}{terms}[2]{docFreq}, 9, ' - foo on index 1';
 
-    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',from=>'baz')->{fields}{text}{terms}}),'baz-foo', ' - from';
-    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',to=>'baz')->{fields}{text}{terms}}),'bar-baz', ' - to';
+        is $es->terms( fields => 'text', min_freq => 17 )
+            ->{fields}{text}{terms}[0]{term}, 'foo', ' - minFreq';
+        is $es->terms( fields => 'text', max_freq => 16 )
+            ->{fields}{text}{terms}[-1]{term}, 'baz', ' - maxFreq';
 
-    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',from=>'baz',exclude_from=>1)->{fields}{text}{terms}}),'foo', ' - exclude_from';
-    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',to=>'baz',exclude_to=>1)->{fields}{text}{terms}}),'bar', ' - exclude_to';
+        is @{ $es->terms( fields => 'text', size => 2 )
+                ->{fields}{text}{terms} }, 2, ' - size';
+        is $es->terms( fields => 'text', sort => 'freq' )
+            ->{fields}{text}{terms}[0]{term}, 'foo', ' - sort freq';
 
-    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',prefix=>'ba')->{fields}{text}{terms}}),'bar-baz', ' - prefix';
-    is join('-', map {$_->{term}} @{$es->terms(fields=>'text',regexp=>'foo|baz')->{fields}{text}{terms}}),'baz-foo', ' - regexp';
-}
+        is join( '-',
+                 map { $_->{term} }
+                     @{
+                     $es->terms( fields => 'text', from => 'baz' )
+                         ->{fields}{text}{terms}
+                     }
+            ),
+            'baz-foo', ' - from';
+        is join( '-',
+                 map { $_->{term} }
+                     @{
+                     $es->terms( fields => 'text', to => 'baz' )
+                         ->{fields}{text}{terms}
+                     }
+            ),
+            'bar-baz', ' - to';
 
+        is join( '-',
+                 map { $_->{term} }
+                     @{
+                     $es->terms( fields       => 'text',
+                                 from         => 'baz',
+                                 exclude_from => 1
+                         )->{fields}{text}{terms}
+                     }
+            ),
+            'foo', ' - exclude_from';
+        is join( '-',
+                 map { $_->{term} }
+                     @{
+                     $es->terms( fields     => 'text',
+                                 to         => 'baz',
+                                 exclude_to => 1
+                         )->{fields}{text}{terms}
+                     }
+            ),
+            'bar', ' - exclude_to';
+
+        is join( '-',
+                 map { $_->{term} }
+                     @{
+                     $es->terms( fields => 'text', prefix => 'ba' )
+                         ->{fields}{text}{terms}
+                     }
+            ),
+            'bar-baz', ' - prefix';
+        is join( '-',
+                 map { $_->{term} }
+                     @{
+                     $es->terms( fields => 'text', regexp => 'foo|baz' )
+                         ->{fields}{text}{terms}
+                     }
+            ),
+            'baz-foo', ' - regexp';
+    }
 
     ###  DELETE_BY_QUERY ###
     ok $es->delete_by_query( term => { text => 'foo' } )->{ok},

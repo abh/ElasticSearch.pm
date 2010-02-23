@@ -1,9 +1,10 @@
 Revision history for ElasticSearch
-0.04    2010-02-22
+0.04    2010-02-23
       - Added terms()
       - Added get_mapping()
       - Renamed create_mapping() to put_mapping()
       - Added ignore_duplicate param to put_mapping
+      - skip create-duplicate-mapping test if cluster has more than one nodes
 
 0.03    2010-02-21
       - Corrected the docs for search/count/delete_by_query

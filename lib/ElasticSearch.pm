@@ -221,17 +221,23 @@ our %Action = (
                             postfix => '_gateway/snapshot'
     },
 
-    'put_mapping' => { method  => 'PUT',
-                       cmd     => CMD_index_TYPE,
-                       postfix => '_mapping',
-                       qs      => {
-                               timeout           => [ 'duration', 'timeout' ],
-                               ignore_duplicates => [
-                                     'boolean', 'ignoreDuplicates=true',
-                                     'ignoreDuplicates=false'
-                               ]
-                       },
-                       data => { properties => 'properties' }
+    'put_mapping' => {
+        method       => 'PUT',
+        cmd          => CMD_index_TYPE,
+        fixup_params => sub {
+            my ( $self, $defn, $params ) = @_;
+            $params->{ignore_duplicates} = 1
+                unless exists $params->{ignore_duplicates};
+        },
+        postfix => '_mapping',
+        qs      => {
+                timeout           => [ 'duration', 'timeout' ],
+                ignore_duplicates => [ 'boolean',
+                                       'ignoreDuplicates=true',
+                                       'ignoreDuplicates=false'
+                ]
+        },
+        data => { properties => 'properties' }
     },
     'get_mapping' => {
         prefix        => '_cluster/state',
@@ -464,17 +470,19 @@ sub _get_mapping {
     my $source = $response->{metadata}{indices}{$index}{mappings}
         or return;
     my $json = $self->JSON;
-    my @types = ! $type ? keys %$source
+    my @types
+        = !$type ? keys %$source
         : ref $type eq 'ARRAY' ? @$type
-        : $type;
+        :                        $type;
 
     my %mappings;
     for (@types) {
         my $val = $source->{$_}{source} or next;
-        my ($key,$mapping)= %{$json->decode($val)};
+        my ( $key, $mapping ) = %{ $json->decode($val) };
         $mappings{$key} = $mapping;
     }
-    $_[2] = $type && ! ref $type
+    $_[2]
+        = $type && !ref $type
         ? $mappings{$type}
         : \%mappings;
 }
@@ -1336,7 +1344,7 @@ C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
         type                => single,
         properties          => { ... }      # required
         timeout             => '5m' | '10s' # optional,
-        ignore_duplicates   => 1 | 0,       # optional
+        ignore_duplicates   => 1 | 0,       # optional, default '1'
     );
 
 A C<mapping> is the data definition of a C<type>.  If no mapping has been
@@ -1361,11 +1369,6 @@ to specify an official C<mapping> instead, eg:
             rank        =>  {type  =>  "float"}
         }
     );
-
-NOTE: ElasticSearch sets C<ignoreDuplicates> to C<true> by default.  On the
-basis of don't-fail-silently, I've switched the default to complain if
-a new mapping overwrites an old mapping.  For the default behaviour, set
-C<< ignore_duplicates => 1 >>.
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/put_mapping>
 and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
