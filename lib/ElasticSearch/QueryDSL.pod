@@ -57,6 +57,7 @@ the valid arguments that a search query can accept.
     | wildcard:       { WILDCARD_QUERY       }
     | matchAll:       { MATCH_ALL_QUERY      }
     | queryString:    { QUERY_STRING_QUERY   }
+    | field:          { FIELD_QUERY          }
     | bool:           { BOOLEAN_QUERY        }
     | disMax:         { DISMAX_QUERY         }
     | constantScore:  { CONSTANT_SCORE_QUERY }
@@ -188,7 +189,12 @@ the valid arguments that a search query can accept.
 
    {
     query:                      STRING,
+
     defaultField:               $fieldname,
+    fields:                     [$field_1, $field_n],
+    useDisMax:                  BOOL,
+    tieBreaker:                 $field_1
+
     defaultOperator:            "AND" | "OR",
     analyzer:                   STRING,
     allowLeadingWildcard:       BOOL,
@@ -197,7 +203,29 @@ the valid arguments that a search query can accept.
     fuzzyPrefixLength:          BOOL,
     fuzzyMinSim:                FLOAT,
     phraseSlop:                 INT,
-    boost:                      FLOAT
+    boost:                      FLOAT,
+    escape:                     BOOLEAN
+   }
+
+
+=head2 FIELD_QUERY:
+   { $fieldname:                STRING }
+ |
+   {
+     $fieldname: {
+        query:                      STRING,
+        defaultOperator:            "AND" | "OR",
+        analyzer:                   STRING,
+        allowLeadingWildcard:       BOOL,
+        lowercaseExpandedTerms:     BOOL,
+        enablePositionIncrements:   BOOL,
+        fuzzyPrefixLength:          BOOL,
+        fuzzyMinSim:                FLOAT,
+        phraseSlop:                 INT,
+        boost:                      FLOAT,
+        escape:                     BOOLEAN
+
+     }
    }
 
 

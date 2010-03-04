@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use constant { ONE_REQ     => 1,
                ONE_OPT     => 2,
@@ -27,15 +27,14 @@ use constant {
     CMD_nodes      => [ node  => MULTI_BLANK ],
 };
 
-our %QS_Format = ( boolean     => '1 | 0',
-                   duration    => "'5m' | '10s'",
-                   search_type => "(dfs_)query_(then|and)_fetch'",
-                   fixed       => '',
-                   optional    => "'scalar value'",
-                   flatten     => "'scalar' or ['scalar_1', 'scalar_n']",
-                   'int'       => "integer",
-                   'string'    => '"string"',
-                   term_sort   => 'term|freq',
+our %QS_Format = ( boolean  => '1 | 0',
+                   duration => "'5m' | '10s'",
+                   fixed    => '',
+                   optional => "'scalar value'",
+                   flatten  => "'scalar' or ['scalar_1', 'scalar_n']",
+                   'int'    => "integer",
+                   'string' => '"string"',
+                   enum     => '"predefined_value"',
 );
 
 our %QS_Formatter = (
@@ -46,13 +45,6 @@ our %QS_Formatter = (
         return unless defined $t;
         return "$k=$t" if $t =~ /^[\d+][smh]$/i;
         die "$k '$t' is not in the form $QS_Format{duration}\n";
-    },
-    search_type => sub {
-        my $t = shift;
-        return unless defined $t;
-        die "searchType '$t' is not in the form $QS_Format{search_type}\n"
-            unless $t =~ /^(dfs_)?query_(then|and)_fetch$/;
-        return "searchType=$t";
     },
     flatten => sub {
         my $array = shift or return;
@@ -71,200 +63,19 @@ our %QS_Formatter = (
         return unless defined $string;
         return shift() . '=' . $string;
     },
-    'term_sort' => sub {
-        my $sort = shift or return;
-        die "'sort' must be one of 'term' or 'freq'"
-            unless $sort =~ /^(term|freq)$/;
-        return 'sort=' . $sort;
-    },
-
-);
-
-our %TemplateDfn = (
-    Index => {
-        cmd => CMD_INDEX_TYPE_id,
-        qs  => {create  => [ 'boolean',  'opType=create' ],
-                timeout => [ 'duration', 'timeout' ],
-        },
-        data         => 'data',
-        fixup_params => sub {
-            my ( $self, $defn, $params ) = @_;
-            $defn->{method} = $params->{id} ? 'PUT' : 'POST';
-        },
-    },
-
-    Search => {
-            cmd          => CMD_index_type,
-            postfix      => '_search',
-            qs           => { search_type => ['search_type'], },
-            fixup_params => sub { $_[2]->{explain} = \1 if $_[2]->{explain} },
-            data         => {
-                      query   => ['query'],
-                      facets  => ['facets'],
-                      from    => ['from'],
-                      size    => ['size'],
-                      explain => ['explain'],
-                      fields  => ['fields'],
-                      'sort'  => ['sort'],
-            }
-    },
-
-    Query => { term          => ['term'],
-               range         => ['range'],
-               prefix        => ['prefix'],
-               wildcard      => ['wildcard'],
-               matchAll      => [ 'match_all', 'matchAll' ],
-               queryString   => [ 'query_string', 'queryString' ],
-               bool          => ['bool'],
-               disMax        => [ 'dis_max', 'disMax' ],
-               constantScore => [ 'constant_score', 'constantScore' ],
-               filteredQuery => [ 'filtered_query', 'filteredQuery' ]
-    }
-);
-
-our %Action = (
-
-    ## DOCUMENT MANAGEMENT
-    'get'    => { cmd => CMD_INDEX_TYPE_ID },
-    'index'  => $TemplateDfn{Index},
-    'set'    => $TemplateDfn{Index},
-    'create' => { %{ $TemplateDfn{Index} },
-                  qs => { create  => [ 'fixed',    'opType=create' ],
-                          timeout => [ 'duration', 'timeout' ],
-                  },
-    },
-
-    'delete' => { method => 'DELETE',
-                  cmd    => CMD_INDEX_TYPE_ID,
-    },
-
-    ## QUERIES
-    'search'          => $TemplateDfn{Search},
-    'delete_by_query' => { %{ $TemplateDfn{Search} },
-                           method  => 'DELETE',
-                           postfix => '_query',
-                           data    => $TemplateDfn{Query},
-    },
-    'count' => { %{ $TemplateDfn{Search} },
-                 postfix => '_count',
-                 data    => $TemplateDfn{Query},
-    },
-    'terms' => {
-        cmd          => CMD_index,
-        postfix      => '_terms',
-        fixup_params => sub {
-            my ( $self, $defn, $params ) = @_;
-            $self->throw( 'Param', "'fields' is a required value" )
-                unless $params->{fields};
-            $params->{exclude_to} ||= 0,;
-        },
-        qs => { 'fields'       => [ 'flatten', 'fields' ],
-                'from'         => [ 'string',  'from' ],
-                'to'           => [ 'string',  'to' ],
-                'exclude_from' => [ 'boolean', 'fromInclusive=false' ],
-                'exclude_to' =>
-                    [ 'boolean', 'toInclusive=false', 'toInclusive=true' ],
-                'prefix'   => [ 'string', 'prefix' ],
-                'regexp'   => [ 'string', 'regexp' ],
-                'min_freq' => [ 'int',    'minFreq' ],
-                'max_freq' => [ 'int',    'maxFreq' ],
-                'size'     => [ 'int',    'size' ],
-                'sort'     => ['term_sort'],
+    'enum' => sub {
+        my $val = shift;
+        return unless defined $val;
+        my $key  = shift;
+        my $vals = $_[0];
+        for (@$vals) {
+            return "${key}=$val" if $val eq $_;
         }
+        die "Unrecognised value '$val'. Allowed values: "
+            . join( ', ', @$vals );
     },
 
-    ## INDEX MANAGEMENT
-    'index_status' => { cmd     => CMD_index,
-                        postfix => '_status'
-    },
-
-    'create_index' => { method  => 'PUT',
-                        cmd     => CMD_INDEX,
-                        postfix => '',
-                        data    => { index => ['defn'] },
-    },
-
-    'delete_index' => { method  => 'DELETE',
-                        cmd     => CMD_INDEX,
-                        postfix => ''
-    },
-
-    'flush_index' => { method  => 'POST',
-                       cmd     => CMD_index,
-                       postfix => '_flush',
-                       qs => { refresh => [ 'boolean', 'refresh=true' ] },
-    },
-
-    'refresh_index' => { method  => 'POST',
-                         cmd     => CMD_index,
-                         postfix => '_refresh'
-    },
-
-    'optimize_index' => {
-                 method  => 'POST',
-                 cmd     => CMD_index,
-                 postfix => '_optimize',
-                 qs      => {
-                     only_deletes => [ 'boolean', 'onlyExpungeDeletes=true' ],
-                     refresh      => [ 'boolean', 'refresh=true' ],
-                     flush        => [ 'boolean', 'flush=true' ]
-                 },
-    },
-
-    'snapshot_index' => { method  => 'POST',
-                          cmd     => CMD_index,
-                          postfix => '_gateway/snapshot'
-    },
-
-    'gateway_snapshot' => { method  => 'POST',
-                            cmd     => CMD_index,
-                            postfix => '_gateway/snapshot'
-    },
-
-    'put_mapping' => {
-        method       => 'PUT',
-        cmd          => CMD_index_TYPE,
-        fixup_params => sub {
-            my ( $self, $defn, $params ) = @_;
-            $params->{ignore_duplicates} = 1
-                unless exists $params->{ignore_duplicates};
-        },
-        postfix => '_mapping',
-        qs      => {
-                timeout           => [ 'duration', 'timeout' ],
-                ignore_duplicates => [ 'boolean',
-                                       'ignoreDuplicates=true',
-                                       'ignoreDuplicates=false'
-                ]
-        },
-        data => { properties => 'properties' }
-    },
-    'get_mapping' => {
-        prefix        => '_cluster/state',
-        cmd           => CMD_INDEX_type,
-        fixup_request => sub {
-            $_[2] = '/_cluster/state'    # reset cmd
-        },
-        fixup_response => \&_get_mapping
-    },
-
-    ## CLUSTER MANAGEMENT
-    'cluster_state' => { prefix => '_cluster/state' },
-
-    'nodes' => { prefix => '_cluster/nodes',
-                 cmd    => CMD_nodes,
-                 qs     => { settings => [ 'boolean', 'settings=true' ] }
-    },
 );
-
-# Setup action subs
-{
-    no strict 'refs';
-    for my $action ( keys %Action ) {
-        *{$action} = sub { shift->_do_action( $action, @_ ) }
-
-    }
-}
 
 #===================================
 sub new {
@@ -275,8 +86,363 @@ sub new {
     for ( keys %$params ) {
         $self->$_( $params->{$_} );
     }
-    $self->refresh_servers($servers);
+    $self->{_servers}{$$} = ref $servers eq 'ARRAY' ? $servers : [$servers];
     return $self;
+}
+
+#===================================
+sub get { shift()->_do_action( 'get', { cmd => CMD_INDEX_TYPE_ID }, @_ ) }
+#===================================
+
+my %Index_Defn = ( cmd => CMD_INDEX_TYPE_id,
+                   qs  => {create  => [ 'boolean',  'opType=create' ],
+                           timeout => [ 'duration', 'timeout' ],
+                   },
+                   data => 'data',
+);
+
+#===================================
+sub index {
+#===================================
+    my ( $self, $params ) = &_params;
+    $self->_index( 'index', \%Index_Defn, $params );
+}
+#===================================
+sub set {
+#===================================
+    my ( $self, $params ) = &_params;
+    $self->_index( 'set', \%Index_Defn, $params );
+}
+
+#===================================
+sub create {
+#===================================
+    my ( $self, $params ) = &_params;
+    $self->_index( 'create',
+                   {  %Index_Defn,
+                      qs => { create  => [ 'fixed',    'opType=create' ],
+                              timeout => [ 'duration', 'timeout' ],
+                      }
+                   },
+                   ,
+                   $params
+    );
+}
+
+#===================================
+sub _index {
+#===================================
+    my $self = shift;
+    $_[1]->{method} = $_[2]->{id} ? 'PUT' : 'POST';
+    $self->_do_action(@_);
+}
+
+#===================================
+sub delete {
+#===================================
+    shift()->_do_action( 'delete',
+                         {  method => 'DELETE',
+                            cmd    => CMD_INDEX_TYPE_ID,
+                         },
+                         @_
+    );
+}
+
+my %Search_Defn = (
+    cmd     => CMD_index_type,
+    postfix => '_search',
+    qs      => {
+        search_type => [
+            'enum',
+            'searchType',
+            [  qw(  dfs_query_then_fetch     dfs_query_and_fetch
+                   query_then_fetch         query_and_fetch)
+            ]
+        ],
+    },
+    data => { query   => ['query'],
+              facets  => ['facets'],
+              from    => ['from'],
+              size    => ['size'],
+              explain => ['explain'],
+              fields  => ['fields'],
+              'sort'  => ['sort'],
+    }
+);
+
+my %Query_Defn = ( term          => ['term'],
+                   range         => ['range'],
+                   prefix        => ['prefix'],
+                   wildcard      => ['wildcard'],
+                   matchAll      => [ 'match_all', 'matchAll' ],
+                   queryString   => [ 'query_string', 'queryString' ],
+                   bool          => ['bool'],
+                   disMax        => [ 'dis_max', 'disMax' ],
+                   constantScore => [ 'constant_score', 'constantScore' ],
+                   filteredQuery => [ 'filtered_query', 'filteredQuery' ]
+);
+
+#===================================
+sub search { shift()->_do_action( 'search', \%Search_Defn, @_ ) }
+#===================================
+
+#===================================
+sub delete_by_query {
+#===================================
+    shift()->_do_action( 'delete_by_query',
+                         {  %Search_Defn,
+                            method  => 'DELETE',
+                            postfix => '_query',
+                            data    => \%Query_Defn,
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub count {
+#===================================
+    shift()->_do_action( 'count',
+                         {  %Search_Defn,
+                            postfix => '_count',
+                            data    => \%Query_Defn,
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub terms {
+#===================================
+    my ( $self, $params ) = &_params;
+
+    $self->throw( 'Param', "'fields' is a required value" )
+        unless $params->{fields};
+
+    $params->{exclude_to} ||= 0;
+    $params->{exclude_to} ||= 0;
+
+    $self->_do_action( 'terms',
+                       {  cmd     => CMD_index,
+                          postfix => '_terms',
+                          qs      => {
+                                'fields' => [ 'flatten', 'fields' ],
+                                'from'   => [ 'string',  'from' ],
+                                'to'     => [ 'string',  'to' ],
+                                'exclude_from' =>
+                                    [ 'boolean', 'fromInclusive=false' ],
+                                'exclude_to' => [
+                                               'boolean', 'toInclusive=false',
+                                               'toInclusive=true'
+                                ],
+                                'prefix'   => [ 'string', 'prefix' ],
+                                'regexp'   => [ 'string', 'regexp' ],
+                                'min_freq' => [ 'int',    'minFreq' ],
+                                'max_freq' => [ 'int',    'maxFreq' ],
+                                'size'     => [ 'int',    'size' ],
+                                'sort' => [ 'enum', 'sort', [qw(term freq)] ],
+                          }
+                       },
+                       @_
+    );
+}
+
+#===================================
+sub index_status {
+#===================================
+    shift()->_do_action( 'index_status',
+                         {  cmd     => CMD_index,
+                            postfix => '_status'
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub create_index {
+#===================================
+    shift()->_do_action( 'create_index',
+                         {  method  => 'PUT',
+                            cmd     => CMD_INDEX,
+                            postfix => '',
+                            data    => { index => ['defn'] },
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub delete_index {
+#===================================
+    shift()->_do_action( 'delete_index',
+                         {  method  => 'DELETE',
+                            cmd     => CMD_INDEX,
+                            postfix => ''
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub flush_index {
+#===================================
+    shift()->_do_action( 'flush_index',
+                         {  method  => 'POST',
+                            cmd     => CMD_index,
+                            postfix => '_flush',
+                            qs =>
+                                { refresh => [ 'boolean', 'refresh=true' ] },
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub refresh_index {
+#===================================
+    shift()->_do_action( 'refresh_index',
+                         {  method  => 'POST',
+                            cmd     => CMD_index,
+                            postfix => '_refresh'
+                         },
+                         @_
+    );
+}
+#===================================
+sub optimize_index {
+#===================================
+    shift()->_do_action( 'optimize_index',
+                         {  method  => 'POST',
+                            cmd     => CMD_index,
+                            postfix => '_optimize',
+                            qs      => {
+                                 only_deletes =>
+                                     [ 'boolean', 'onlyExpungeDeletes=true' ],
+                                 refresh => [ 'boolean', 'refresh=true' ],
+                                 flush   => [ 'boolean', 'flush=true' ]
+                            },
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub snapshot_index {
+#===================================
+    shift()->_do_action( 'snapshot_index',
+                         {  method  => 'POST',
+                            cmd     => CMD_index,
+                            postfix => '_gateway/snapshot'
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub gateway_snapshot {
+#===================================
+    shift()->_do_action( 'gateway_snapshot',
+                         {  method  => 'POST',
+                            cmd     => CMD_index,
+                            postfix => '_gateway/snapshot'
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub put_mapping {
+#===================================
+    my ( $self, $params ) = &_params;
+    $params->{ignore_conflicts} = 1
+        unless exists $params->{ignore_conflicts};
+    $self->_do_action( 'put_mapping',
+                       {  method  => 'PUT',
+                          cmd     => CMD_index_TYPE,
+                          postfix => '_mapping',
+                          qs      => {
+                                  timeout => [ 'duration', 'timeout' ],
+                                  ignore_conflicts => ['boolean',
+                                                       'ignoreConflicts=true',
+                                                       'ignoreConflicts=false'
+                                  ]
+                          },
+                          data => { properties => 'properties' }
+                       },
+                       $params
+    );
+}
+
+#===================================
+sub get_mapping {
+#===================================
+    my ( $self,  $params ) = &_params;
+    my ( $index, $type )   = @{$params}{qw(index type)};
+
+    my $state = $self->cluster_state;
+
+    my $source = $state->{metadata}{indices}{$index}{mappings}
+        or return;
+    my $json = $self->JSON;
+    my @types
+        = !$type ? keys %$source
+        : ref $type eq 'ARRAY' ? @$type
+        :                        $type;
+
+    my %mappings;
+    for (@types) {
+        my $val = $source->{$_}{source} or next;
+        my ( $key, $mapping ) = %{ $json->decode($val) };
+        $mappings{$key} = $mapping;
+    }
+    return $type && !ref $type
+        ? $mappings{$type}
+        : \%mappings;
+
+}
+
+#===================================
+sub cluster_state {
+#===================================
+    shift()
+        ->_do_action( 'cluster_state', { prefix => '_cluster/state' }, @_ );
+}
+
+#===================================
+sub nodes {
+#===================================
+    shift()->_do_action( 'nodes',
+                         {  prefix => '_cluster/nodes',
+                            cmd    => CMD_nodes,
+                            qs     => {
+                                    settings => [ 'boolean', 'settings=true' ]
+                            }
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub cluster_health {
+#===================================
+    shift()->_do_action( 'cluster_health',
+                         {  prefix => '_cluster/health',
+                            cmd    => CMD_index,
+                            qs     => {
+                                    level => [ 'enum', 'level',
+                                               [qw(cluster indices shards)]
+                                    ],
+                                    wait_for_status => [
+                                                      'enum', 'waitForStatus',
+                                                      [qw(green yellow red)]
+                                    ],
+                                    wait_for_relocating_shards =>
+                                        [ 'int', 'waitForRelocatingShards' ],
+                                    timeout => [ 'int', 'timeout' ]
+                            }
+                         },
+                         @_
+    );
 }
 
 #===================================
@@ -284,17 +450,12 @@ sub _do_action {
 #===================================
     my $self            = shift;
     my $action          = shift || '';
+    my $defn            = shift || {};
     my $original_params = $self->_params(@_);
-
-    my $defn = $Action{$action}
-        or $self->throw( 'Internal', "Unknown action '$action'" );
 
     my ( $cmd, $data, $error );
 
     my $params = {%$original_params};
-    if ( my $fixup = $defn->{fixup_params} ) {
-        $fixup->( $self, $defn, $params );
-    }
     eval {
         $cmd = join '',
             grep {defined}
@@ -307,24 +468,17 @@ sub _do_action {
         1;
     } or $error = $@ || 'Unknown error';
 
-    if ( my $fixup = $defn->{fixup_request} ) {
-        $fixup->( $self, $original_params, $cmd, $data );
-    }
     $self->throw( 'Param',
                   $error . $self->_usage( $action, $defn ),
                   { params => $original_params } )
         if $error;
 
-    my $response =
+    return
         $self->request( { method => $defn->{method} || 'GET',
                           cmd    => $cmd,
                           data   => $data,
                         }
         );
-    if ( my $fixup = $defn->{fixup_response} ) {
-        $fixup->( $self, $original_params, $response );
-    }
-    return $response;
 }
 
 #===================================
@@ -362,9 +516,10 @@ sub _usage {
             values %$data;
 
         for (@keys) {
-            $usage .= sprintf( "  - %-15s =>  %-45s # %s\n",
-                               $_->[0], '{' . $_->[0] . '}',
-                               $_->[1] );
+            $usage .=
+                sprintf( "  - %-15s =>  %-45s # %s\n",
+                         $_->[0], '{' . $_->[0] . '}',
+                         $_->[1] );
         }
     }
     return $usage;
@@ -460,33 +615,6 @@ sub _build_cmd {
     return join '/', '', grep {defined} ( $prefix, @cmd, $postfix );
 }
 
-## fixes up the return value for get_mapping
-#===================================
-sub _get_mapping {
-#===================================
-    my ( $self, $params, $response ) = @_;
-    my ( $index, $type ) = @{$params}{qw(index type)};
-
-    my $source = $response->{metadata}{indices}{$index}{mappings}
-        or return;
-    my $json = $self->JSON;
-    my @types
-        = !$type ? keys %$source
-        : ref $type eq 'ARRAY' ? @$type
-        :                        $type;
-
-    my %mappings;
-    for (@types) {
-        my $val = $source->{$_}{source} or next;
-        my ( $key, $mapping ) = %{ $json->decode($val) };
-        $mappings{$key} = $mapping;
-    }
-    $_[2]
-        = $type && !ref $type
-        ? $mappings{$type}
-        : \%mappings;
-}
-
 #===================================
 sub servers { shift->{_servers}{$$} }
 #===================================
@@ -503,7 +631,8 @@ sub refresh_servers {
     my @live_servers;
     foreach my $server (@servers) {
         next unless $server;
-        $server = 'http://' . $server unless $server =~ m{^http(?:s)?://};
+        $server = 'http://' . $server
+            unless $server =~ m{^http(?:s)?://};
         $server =~ s{/+$}{};
 
         my $nodes = eval {
@@ -515,6 +644,7 @@ sub refresh_servers {
             grep { $_->{httpAddress} } values %$nodes;
         last if @live_servers;
     }
+
     $self->throw( 'NoServers',
                   "Could not retrieve a list of active servers: $@",
                   { servers => \@servers } )
@@ -834,7 +964,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.04 - this is an alpha release
+Version 0.05 - this is an alpha release
 
 =cut
 
@@ -1344,7 +1474,7 @@ C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
         type                => single,
         properties          => { ... }      # required
         timeout             => '5m' | '10s' # optional,
-        ignore_duplicates   => 1 | 0,       # optional, default '1'
+        ignore_conflicts    => 1 | 0,       # optional, default '1'
     );
 
 A C<mapping> is the data definition of a C<type>.  If no mapping has been
@@ -1417,6 +1547,39 @@ Returns information about one or more nodes or servers in the cluster. If
 C<settings> is C<true>, then it includes the node settings information.
 
 See: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/cluster/nodes_info>
+
+=head3 C<cluster_health()>
+
+    $result = $e->cluster_health(
+        index           => multi,
+        level           => 'cluster' | 'indices' | 'shards',
+        wait_for_status => 'red' | 'yellow' | 'green',
+        | wait_for_relocating_shards => $number_of_shards,
+        timeout         => $seconds
+    );
+
+Returns the status of the cluster, or index|indices or shards, where the
+returned status means:
+
+=over
+
+=item red: Data not allocated
+
+=item yellow: Primary shard allocated
+
+=item green: All shards allocated
+
+=back
+
+It can block to wait for a particular status (or better), or can block to
+wait until the specified number of shards have been relocated (where 0 means
+all).
+
+If waiting, then a timeout can be specified.
+
+For example:
+
+    $result = $e->cluster_health( wait_for_status => 'green', timeout => 10)
 
 =cut
 
@@ -1581,7 +1744,7 @@ Clinton Gormley, C<< <drtech at cpan.org> >>
 
 =over
 
-=item   L</"set()">, L<"/index()"> and L<"/create()">
+=item   L</"set()">, L</"index()"> and L</"create()">
 
 If one of the fields that you are trying to index has the same name as the
 type, then you need change the format as follows:

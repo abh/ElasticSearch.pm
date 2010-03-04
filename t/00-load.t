@@ -3,6 +3,7 @@
 use Test::Most qw(defer_plan);
 use Module::Build;
 use File::Spec::Functions qw(catfile);
+use POSIX 'setsid';
 
 BEGIN {
     use_ok 'ElasticSearch' || print "Bail out!";
@@ -38,7 +39,8 @@ SKIP: {
     ok $r->{clusterName}, ' - has clusterName';
     isa_ok $r->{nodes}, 'HASH', ' - has nodes';
 
-    my @nodes = ( keys %{ $r->{nodes} } );
+    my @nodes     = ( keys %{ $r->{nodes} } );
+    my $num_nodes = @nodes;
 
     isa_ok $r = $es->nodes( node => $nodes[0] ), 'HASH', ' - single node';
     is keys %{ $r->{nodes} }, 1, ' - retrieved one node';
@@ -48,7 +50,7 @@ SKIP: {
         'HASH', ' - node settings';
 
 SKIP: {
-        skip "Requires more than 2 nodes ", 3 unless @nodes > 2;
+        skip "Requires more than 2 nodes ", 3 unless $num_nodes > 2;
 
         # remove one, so we're not just retrieving all nodes
         shift @nodes;
@@ -77,7 +79,7 @@ SKIP: {
         )->{ok},
         'Create index with defn';
 
-    flush_es();
+    wait_for_es();
 
     ### INDEX STATUS ###
     my $indices;
@@ -151,7 +153,7 @@ SKIP: {
         'HASH', 'Index document';
     ok $r->{ok}, ' - Indexed';
     is $r->{_id}, 1, ' - ID matches';
-    flush_es();
+    wait_for_es(1);
 
     isa_ok $r= $es->get( index => $Index, type => 'test', id => 1 ), 'HASH',
         'Get document';
@@ -175,7 +177,7 @@ SKIP: {
         ),
         'HASH', 'Create document';
 
-    flush_es();
+    wait_for_es(1);
     ok $r->{ok}, ' - Created';
     is $r->{_id}, 1, ' - ID matches';
     is $es->search( index => $Index,
@@ -194,7 +196,7 @@ SKIP: {
         ),
         'HASH', ' - re-set document';
 
-    flush_es();
+    wait_for_es(1);
     is $es->search( index => $Index,
                     type  => 'test',
                     query => { term => { num => 'foo' } }
@@ -219,22 +221,24 @@ SKIP: {
     is $mapping->{properties}{text}{type}, 'string',  ' - index 1 string map';
     is $mapping->{properties}{num}{type},  'integer', ' - index 1 int map';
 
-SKIP: {
-        skip
-            "Create duplicate mapping kills clusters with more than one node",
-            1
-            if @nodes > 1;
-        throws_ok {
-            $es->put_mapping( index      => [ $Index, $Index_2 ],
-                              type       => 'test',
-                              properties => { text => { type => 'string' },
-                                              num  => { type => 'integer' }
-                              },
-                              ignore_duplicates => 0,
-            );
-        }
-        qr/MergeMappingException/, 'Error on duplicate mapping';
+    throws_ok {
+        $es->put_mapping( index      => [ $Index, $Index_2 ],
+                          type       => 'test',
+                          properties => { text => { type => 'string' },
+                                          num  => { type => 'integer' }
+                          },
+                          ignore_conflicts => 0,
+        );
     }
+    qr/exists, can't merge/, 'Error on duplicate mapping';
+
+    ok $r= $es->put_mapping( index      => [ $Index, $Index_2 ],
+                             type       => 'test',
+                             properties => { text => { type => 'string' },
+                                             num  => { type => 'integer' }
+                             }
+        ),
+        'Ignore duplicate mapping';
 
     ok $es->put_mapping(
            index => [ $Index, $Index_2 ],
@@ -285,7 +289,7 @@ SKIP: {
 SKIP: {
 
         # QUERY_AND_FETCH
-        skip "Requires more than 1 node ", 3 unless @nodes > 1;
+        skip "Requires more than 1 node ", 3 unless $num_nodes > 1;
 
         isa_ok $r= $es->search( query       => { matchAll => {} },
                                 search_type => 'query_and_fetch'
@@ -384,97 +388,92 @@ SKIP: {
                    }
     )->{count}, 8, 'Count: filteredQuery';
 
-SKIP: {
+    ### TERMS
+    # add another foo to make the document frequency uneven
+    $es->set( index => $Index,
+              type  => 'type_1',
+              id    => 30,
+              data  => { text => 'foo' }
+    );
+    wait_for_es(1);
 
-        ### TERMS
-        skip "Terms queries fail across multiple nodes", 14 if @nodes > 1;
+    isa_ok $r= $es->terms( fields => 'text' )->{fields}{text}{terms},
+        'ARRAY', "All terms";
+    is $r->[2]{docFreq}, 17, ' - foo docFreq';
+    is $r->[0]{docFreq}, 16, ' - bar docFreq';
 
-        # add another foo to make the document frequency uneven
-        $es->set( index => $Index,
-                  type  => 'type_1',
-                  id    => 30,
-                  data  => { text => 'foo' }
-        );
-        flush_es();
+    is $es->terms( index => $Index, fields => 'text' )
+        ->{fields}{text}{terms}[2]{docFreq}, 9, ' - foo on index 1';
 
-        isa_ok $r= $es->terms( fields => 'text' )->{fields}{text}{terms},
-            'ARRAY', "All terms";
-        is $r->[2]{docFreq}, 17, ' - foo docFreq';
-        is $r->[0]{docFreq}, 16, ' - bar docFreq';
+    is $es->terms( fields => 'text', min_freq => 17 )
+        ->{fields}{text}{terms}[0]{term}, 'foo', ' - minFreq';
+    is $es->terms( fields => 'text', max_freq => 16 )
+        ->{fields}{text}{terms}[-1]{term}, 'baz', ' - maxFreq';
 
-        is $es->terms( index => $Index, fields => 'text' )
-            ->{fields}{text}{terms}[2]{docFreq}, 9, ' - foo on index 1';
+    is @{ $es->terms( fields => 'text', size => 2 )->{fields}{text}{terms} },
+        2, ' - size';
+    is $es->terms( fields => 'text', sort => 'freq' )
+        ->{fields}{text}{terms}[0]{term}, 'foo', ' - sort freq';
 
-        is $es->terms( fields => 'text', min_freq => 17 )
-            ->{fields}{text}{terms}[0]{term}, 'foo', ' - minFreq';
-        is $es->terms( fields => 'text', max_freq => 16 )
-            ->{fields}{text}{terms}[-1]{term}, 'baz', ' - maxFreq';
+    is join( '-',
+             map { $_->{term} }
+                 @{
+                 $es->terms( fields => 'text', from => 'baz' )
+                     ->{fields}{text}{terms}
+                 }
+        ),
+        'baz-foo', ' - from';
+    is join( '-',
+             map { $_->{term} }
+                 @{
+                 $es->terms( fields => 'text', to => 'baz' )
+                     ->{fields}{text}{terms}
+                 }
+        ),
+        'bar-baz', ' - to';
 
-        is @{ $es->terms( fields => 'text', size => 2 )
-                ->{fields}{text}{terms} }, 2, ' - size';
-        is $es->terms( fields => 'text', sort => 'freq' )
-            ->{fields}{text}{terms}[0]{term}, 'foo', ' - sort freq';
+    is join( '-',
+             map { $_->{term} }
+                 @{
+                 $es->terms( fields       => 'text',
+                             from         => 'baz',
+                             exclude_from => 1
+                     )->{fields}{text}{terms}
+                 }
+        ),
+        'foo', ' - exclude_from';
+    is join( '-',
+             map { $_->{term} }
+                 @{
+                 $es->terms( fields     => 'text',
+                             to         => 'baz',
+                             exclude_to => 1
+                     )->{fields}{text}{terms}
+                 }
+        ),
+        'bar', ' - exclude_to';
 
-        is join( '-',
-                 map { $_->{term} }
-                     @{
-                     $es->terms( fields => 'text', from => 'baz' )
-                         ->{fields}{text}{terms}
-                     }
-            ),
-            'baz-foo', ' - from';
-        is join( '-',
-                 map { $_->{term} }
-                     @{
-                     $es->terms( fields => 'text', to => 'baz' )
-                         ->{fields}{text}{terms}
-                     }
-            ),
-            'bar-baz', ' - to';
-
-        is join( '-',
-                 map { $_->{term} }
-                     @{
-                     $es->terms( fields       => 'text',
-                                 from         => 'baz',
-                                 exclude_from => 1
-                         )->{fields}{text}{terms}
-                     }
-            ),
-            'foo', ' - exclude_from';
-        is join( '-',
-                 map { $_->{term} }
-                     @{
-                     $es->terms( fields     => 'text',
-                                 to         => 'baz',
-                                 exclude_to => 1
-                         )->{fields}{text}{terms}
-                     }
-            ),
-            'bar', ' - exclude_to';
-
-        is join( '-',
-                 map { $_->{term} }
-                     @{
-                     $es->terms( fields => 'text', prefix => 'ba' )
-                         ->{fields}{text}{terms}
-                     }
-            ),
-            'bar-baz', ' - prefix';
-        is join( '-',
-                 map { $_->{term} }
-                     @{
-                     $es->terms( fields => 'text', regexp => 'foo|baz' )
-                         ->{fields}{text}{terms}
-                     }
-            ),
-            'baz-foo', ' - regexp';
-    }
+    is join( '-',
+             map { $_->{term} }
+                 @{
+                 $es->terms( fields => 'text', prefix => 'ba' )
+                     ->{fields}{text}{terms}
+                 }
+        ),
+        'bar-baz', ' - prefix';
+    is join( '-',
+             map { $_->{term} }
+                 @{
+                 $es->terms( fields => 'text', regexp => 'foo|baz' )
+                     ->{fields}{text}{terms}
+                 }
+        ),
+        'baz-foo', ' - regexp';
 
     ###  DELETE_BY_QUERY ###
     ok $es->delete_by_query( term => { text => 'foo' } )->{ok},
         "Delete by query";
-    flush_es();
+    wait_for_es(1);
     is $es->count( term => { text => 'foo' } )->{count}, 0, " - foo deleted";
     is $es->count( term => { text => 'bar' } )->{count}, 8,
         " - bar not deleted";
@@ -506,7 +505,7 @@ sub index_test_docs {
                       },
     );
 
-    flush_es();
+    wait_for_es();
 
     my @phrases = ( 'foo',
                     'foo bar',
@@ -531,7 +530,7 @@ sub index_test_docs {
             }
         }
     }
-    flush_es();
+    wait_for_es(1);
 
 }
 
@@ -539,14 +538,14 @@ sub drop_indices {
     eval {
         $es->delete_index( index => $Index );
         $es->delete_index( index => $Index_2 );
-        flush_es();
+        wait_for_es();
     };
 
 }
 
-sub flush_es {
-    sleep 2;
-    $es->flush_index( refresh => 1 );
+sub wait_for_es {
+    $es->cluster_health( wait_for_status => 'green', timeout => 2 );
+    sleep $_[0] if $_[0];
 }
 
 my @PIDs;
@@ -561,12 +560,20 @@ sub connect_to_es {
         return unless $install_dir;
         my $cmd = catfile( $install_dir, 'bin', 'elasticsearch' );
         my $pid_file = File::Temp->new;
+
         for ( 1 .. 3 ) {
             diag "Starting test node $_";
-            system( $cmd, '-p', $pid_file->filename );
-            sleep 1;
-            open my $pid_fh, '<', $pid_file->filename;
-            push @PIDs, <$pid_fh>;
+            if (fork) {
+                die "Can't start a new session: $!" if setsid == -1;
+                exec( $cmd, '-p', $pid_file->filename );
+
+            }
+            else {
+                sleep 1;
+                open my $pid_fh, '<', $pid_file->filename;
+                push @PIDs, <$pid_fh>;
+            }
+
         }
         $server = '127.0.0.1:9200';
         diag "Waiting for servers to warm up";
@@ -579,6 +586,6 @@ sub connect_to_es {
     return $es;
 }
 
-sub shutdown_servers { kill 9, @PIDs; exit(0) }
+sub shutdown_servers { kill 9, @PIDs; wait; exit(0) }
 END { shutdown_servers() }
 

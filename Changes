@@ -1,4 +1,13 @@
 Revision history for ElasticSearch
+0.05    2010-03-04
+      - Delayed connecting to the cluster until actually required (previously
+        it refreshed the server list in new() )
+      - Restructured the internals again, to make it easier to read
+      - Added cluster_health()
+      - Fixed the test suite so that auto-started nodes don't take over
+        the terminal
+      - Enabled more tests as ElasticSearch now less buggy
+
 0.04    2010-02-23
       - Added terms()
       - Added get_mapping()
