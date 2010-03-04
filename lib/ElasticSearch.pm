@@ -1041,7 +1041,7 @@ L<http://www.elasticsearch.com/download/>, or to build from source on Unix:
     ./gradlew
 
     cd /path/where/you/want/elasticsearch
-    unzip ~/elasticsearch/distributions/elasticsearch*
+    unzip ~/elasticsearch/build/distributions/elasticsearch*
 
 To start a test server in the foreground:
 
