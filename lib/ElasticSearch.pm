@@ -1038,7 +1038,7 @@ L<http://www.elasticsearch.com/download/>, or to build from source on Unix:
     cd ~
     git clone git://github.com/elasticsearch/elasticsearch.git
     cd elasticsearch
-    ./gradlew clean devRelease
+    ./gradlew
 
     cd /path/where/you/want/elasticsearch
     unzip ~/elasticsearch/distributions/elasticsearch*
