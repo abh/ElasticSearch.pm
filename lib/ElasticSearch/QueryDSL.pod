@@ -79,7 +79,7 @@ the valid arguments that a search query can accept.
 =head2 FACETS_CLAUSE
 
    {
-    $facet_name_1:   { QUERY_CLAUSE },
+    $facet_name_1:   { QUERY_CLAUSE, global: BOOL },
     $facet_name_n:   ...
    }
 
