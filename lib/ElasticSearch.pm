@@ -438,7 +438,7 @@ sub cluster_health {
                                     ],
                                     wait_for_relocating_shards =>
                                         [ 'int', 'waitForRelocatingShards' ],
-                                    timeout => [ 'int', 'timeout' ]
+                                    timeout => [ 'duration', 'timeout' ]
                             }
                          },
                          @_

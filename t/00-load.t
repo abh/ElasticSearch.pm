@@ -544,7 +544,7 @@ sub drop_indices {
 }
 
 sub wait_for_es {
-    $es->cluster_health( wait_for_status => 'green', timeout => 2 );
+    $es->cluster_health( wait_for_status => 'green', timeout => '2s' );
     sleep $_[0] if $_[0];
 }
 
