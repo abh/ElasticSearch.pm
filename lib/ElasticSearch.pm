@@ -379,6 +379,19 @@ sub get_mapping {
     my ( $self,  $params ) = &_params;
     my ( $index, $type )   = @{$params}{qw(index type)};
 
+    my $error
+        = ref $index ? "'index' must be a single value\n"
+        : defined $index && length $index ? ''
+        :   "Parameter 'index' is a required value\n";
+
+    $self->throw( 'Param',
+                  $error
+                      . $self->_usage( 'get_mapping',
+                                       { cmd => CMD_INDEX_type }
+                      ),
+                  { params => $params }
+    ) if $error;
+
     my $state = $self->cluster_state;
 
     my $source = $state->{metadata}{indices}{$index}{mappings}
