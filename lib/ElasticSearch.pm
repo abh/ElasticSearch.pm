@@ -834,7 +834,8 @@ sub _log_result {
     while (@lines) {
         my $line = shift @lines;
         if ( length $line > 65 ) {
-            my ($spaces) = ( $line =~ /^(\s*)/ );
+            my ($spaces) = ( $line =~ /^(?:> )?(\s*)/ );
+            $spaces = substr($spaces,0,20) if length $spaces > 20;
             unshift @lines, '> ' . $spaces . substr( $line, 65 );
             $line = substr $line, 0, 65;
         }
