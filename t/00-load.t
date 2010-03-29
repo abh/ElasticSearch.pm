@@ -146,6 +146,22 @@ SKIP: {
     ok $es->gateway_snapshot( index => [ $Index, $Index_2 ] )->{ok},
         ' - with gateway_snapshot';
 
+    ### INDEX ALIASES ###
+    ok $es->aliases(
+        actions => { add => { alias => 'alias_1', index => $Index } } ),
+        'add alias_1';
+    wait_for_es(1);
+    is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
+    ok $es->aliases(
+        actions => [
+            { add    => { alias => 'alias_1', index => $Index_2 } },
+            { remove => { alias => 'alias_1', index => $Index } }
+        ]
+        ),
+        'add and remove alias_1';
+    wait_for_es(1);
+    is $es->get_aliases->{aliases}{alias_1}[0], $Index_2, 'alias_1 changed';
+
     ### INDEX DOCUMENTS ###
     isa_ok $r= $es->index(
         index => $Index,
@@ -383,18 +399,31 @@ SKIP: {
         fields => [ 'text', 'num' ]
     )->{hits}{hits}[0]{fields}{text}, qr/foo/, 'Fields query';
 
-    ### COUNT ###
+    # HIGHLIGHT
+    like $es->search(
+        query     => { term   => { text => 'foo' } },
+        highlight => { fields => { _all => {} } }
+        )->{hits}{hits}[0]{highlight}{_all}[0], qr{<em>foo</em>},
+        'Highlighting';
+
+    ## COUNT ###
 
     is $es->count( term => { text => 'foo' } )->{count}, 16, "Count: term";
+
     is $es->count( range => { num => { from => 10, to => 20 } } )->{count},
         11, 'Count: range';
+
     is $es->count( prefix => { text => 'ba' } )->{count}, 24, 'Count: prefix';
+
     is $es->count( wildcard => { text => 'ba?' } )->{count}, 24,
         'Count: wildcard';
+
     is $es->count( match_all => {} )->{count}, 28, 'Count: matchAll';
+
     is $es->count( query_string =>
             { query => 'foo AND bar AND -baz', defaultField => 'text' } )
         ->{count}, 4, 'Count: queryString';
+
     is $es->count(
         bool => {
             must => [
@@ -403,6 +432,7 @@ SKIP: {
             ]
         }
     )->{count}, 8, 'Count: bool';
+
     is $es->count(
         dis_max => {
             queries => [
@@ -411,15 +441,44 @@ SKIP: {
             ]
         }
     )->{count}, 24, 'Count: disMax';
+
     is $es->count(
         constant_score => { filter => { term => { text => 'foo' } } } )
         ->{count}, 16, 'Count: constantScore';
+
     is $es->count(
         filtered => {
             query  => { term => { text => 'foo' } },
             filter => { term => { text => 'bar' } }
         }
     )->{count}, 8, 'Count: filtered';
+
+    is $es->count( field => { text => 'foo' } )->{count}, 16, 'Count: field';
+
+SKIP: {
+        skip "Count more_like_this differs from search ", 2;
+        is $es->count( more_like_this =>
+                { likeText => 'foo bar baz', minTermFrequency => 1 } )
+            ->{count}, 5, 'Count: more_like_this';
+        is $es->count(
+            more_like_this_field => {
+                text => { likeText => 'foo bar baz', minTermFrequency => 1 }
+            }
+        )->{count}, 5, 'Count: more_like_this';
+
+    }
+
+    ### MORE LIKE THIS
+    is $es->more_like_this(
+        index         => $Index,
+        type          => 'type_1',
+        id            => 1,
+        mlt_fields    => ['text'],
+        min_term_freq => 1,
+        min_doc_freq  => 1
+    )->{hits}{total}, 3, 'more_like_this';
+    all_done;
+    exit;
 
     ### TERMS
     # add another foo to make the document frequency uneven
@@ -528,18 +587,22 @@ sub index_test_docs {
 
     $es->create_index( index => $_ ) for ( $Index, $Index_2 );
     $es->put_mapping(
-        type       => 'type_1',
+        type => 'type_1',
+        all_field =>
+            { store => "yes", termVector => "with_positions_offsets" },
         properties => {
             text => { type => 'string',  store => 'yes' },
-            num  => { type => 'integer', store => 'yes' }
+            num  => { type => 'integer', store => 'yes' },
         },
     );
 
     $es->put_mapping(
-        type       => 'type_2',
+        type => 'type_2',
+        all_field =>
+            { store => "yes", termVector => "with_positions_offsets" },
         properties => {
             text => { type => 'string',  store => 'yes' },
-            num  => { type => 'integer', store => 'yes' }
+            num  => { type => 'integer', store => 'yes' },
         },
     );
 
