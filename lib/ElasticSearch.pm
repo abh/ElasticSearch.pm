@@ -243,17 +243,18 @@ sub terms {
         {   cmd     => CMD_index,
             postfix => '_terms',
             qs      => {
-                'fields'         => [ 'flatten', 'fields' ],
-                'from'           => [ 'string',  'from' ],
-                'to'             => [ 'string',  'to' ],
-                'from_inclusive' => [ 'boolean', '', 'fromInclusive=false' ],
-                'to_inclusive'   => [ 'boolean', '', 'toInclusive=false' ],
-                'prefix'         => [ 'string',  'prefix' ],
-                'regexp'         => [ 'string',  'regexp' ],
-                'min_freq'       => [ 'int',     'minFreq' ],
-                'max_freq'       => [ 'int',     'maxFreq' ],
-                'size'           => [ 'int',     'size' ],
-                'sort'           => [ 'enum',    'sort', [qw(term freq)] ],
+                'fields' => [ 'flatten', 'fields' ],
+                'from'   => [ 'string',  'from' ],
+                'to'     => [ 'string',  'to' ],
+                'from_inclusive' =>
+                    [ 'boolean', undef, 'fromInclusive=false' ],
+                'to_inclusive' => [ 'boolean', undef, 'toInclusive=false' ],
+                'prefix'   => [ 'string', 'prefix' ],
+                'regexp'   => [ 'string', 'regexp' ],
+                'min_freq' => [ 'int',    'minFreq' ],
+                'max_freq' => [ 'int',    'maxFreq' ],
+                'size'     => [ 'int',    'size' ],
+                'sort'     => [ 'enum',   'sort', [qw(term freq)] ],
             }
         },
         @_
@@ -650,6 +651,7 @@ sub _build_qs {
     my @qs;
     foreach my $key ( keys %$defn ) {
         my ( $format_name, @args ) = @{ $defn->{$key} || [] };
+        next unless exists $params->{$key};
         $format_name ||= '';
 
         my $formatter = $QS_Formatter{$format_name}

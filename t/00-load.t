@@ -159,7 +159,7 @@ SKIP: {
         'HASH', 'Index document';
     ok $r->{ok}, ' - Indexed';
     is $r->{_id}, 1, ' - ID matches';
-    wait_for_es(1);
+    wait_for_es(2);
 
     isa_ok $r= $es->get( index => $Index, type => 'test', id => 1 ), 'HASH',
         'Get document';
@@ -187,6 +187,7 @@ SKIP: {
         'HASH', 'Create document';
 
     wait_for_es(1);
+
     ok $r->{ok}, ' - Created';
     is $r->{_id}, 1, ' - ID matches';
     is $es->search(
@@ -451,15 +452,20 @@ SKIP: {
     is join(
         '-',
         map { $_->{term} } @{
-            $es->terms( fields => 'text', from => 'baz' )
-                ->{fields}{text}{terms}
+            $es->terms(
+                fields => 'text',
+                from   => 'baz',
+                )->{fields}{text}{terms}
             }
         ),
         'baz-foo', ' - from';
     is join(
         '-',
         map { $_->{term} } @{
-            $es->terms( fields => 'text', to => 'baz' )->{fields}{text}{terms}
+            $es->terms(
+                fields => 'text',
+                to     => 'baz',
+                )->{fields}{text}{terms}
             }
         ),
         'bar-baz', ' - to';
@@ -468,24 +474,21 @@ SKIP: {
         '-',
         map { $_->{term} } @{
             $es->terms(
-                fields       => 'text',
-                from         => 'baz',
-                exclude_from => 1
+                fields         => 'text',
+                from           => 'baz',
+                from_inclusive => 0,
                 )->{fields}{text}{terms}
             }
         ),
-        'foo', ' - exclude_from';
+        'foo', ' - from_inclusive 0';
     is join(
         '-',
         map { $_->{term} } @{
-            $es->terms(
-                fields     => 'text',
-                to         => 'baz',
-                exclude_to => 1
-                )->{fields}{text}{terms}
+            $es->terms( fields => 'text', to => 'baz', to_inclusive => 0 )
+                ->{fields}{text}{terms}
             }
         ),
-        'bar', ' - exclude_to';
+        'bar', ' - to_inclusive 0';
 
     is join(
         '-',
