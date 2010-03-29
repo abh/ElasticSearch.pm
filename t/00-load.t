@@ -206,6 +206,7 @@ SKIP: {
 
     ### PUT MAPPING ###
     drop_indices();
+    $es->create_index( index => $_ ) for ($Index,$Index_2);
 
     ok $es->put_mapping(
            index => [ $Index, $Index_2 ],
@@ -489,8 +490,7 @@ sub index_test_docs {
 
     drop_indices();
 
-    $es->create_index( index => $Index );
-    $es->create_index( index => $Index_2 );
+    $es->create_index( index => $_ ) for ($Index,$Index_2);
     $es->put_mapping( type       => 'type_1',
                       properties => {
                                 text => { type => 'string',  store => 'yes' },
