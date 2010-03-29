@@ -8,12 +8,13 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
-use constant { ONE_REQ     => 1,
-               ONE_OPT     => 2,
-               MULTI_ALL   => 3,
-               MULTI_BLANK => 4,
+use constant {
+    ONE_REQ     => 1,
+    ONE_OPT     => 2,
+    MULTI_ALL   => 3,
+    MULTI_BLANK => 4,
 };
 
 use constant {
@@ -27,15 +28,16 @@ use constant {
     CMD_nodes      => [ node  => MULTI_BLANK ],
 };
 
-our %QS_Format = ( boolean  => '1 | 0',
-                   duration => "'5m' | '10s'",
-                   fixed    => '',
-                   optional => "'scalar value'",
-                   flatten  => "'scalar' or ['scalar_1', 'scalar_n']",
-                   'int'    => "integer",
-                   string   => '"string"',
-                   float    => 'float',
-                   enum     => '"predefined_value"',
+our %QS_Format = (
+    boolean  => '1 | 0',
+    duration => "'5m' | '10s'",
+    fixed    => '',
+    optional => "'scalar value'",
+    flatten  => "'scalar' or ['scalar_1', 'scalar_n']",
+    'int'    => "integer",
+    string   => '"string"',
+    float    => 'float',
+    enum     => '"predefined_value"',
 );
 
 our %QS_Formatter = (
@@ -102,11 +104,13 @@ sub new {
 sub get { shift()->_do_action( 'get', { cmd => CMD_INDEX_TYPE_ID }, @_ ) }
 #===================================
 
-my %Index_Defn = ( cmd => CMD_INDEX_TYPE_id,
-                   qs  => {create  => [ 'boolean',  'opType=create' ],
-                           timeout => [ 'duration', 'timeout' ],
-                   },
-                   data => 'data',
+my %Index_Defn = (
+    cmd => CMD_INDEX_TYPE_id,
+    qs  => {
+        create  => [ 'boolean',  'opType=create' ],
+        timeout => [ 'duration', 'timeout' ],
+    },
+    data => 'data',
 );
 
 #===================================
@@ -127,14 +131,16 @@ sub set {
 sub create {
 #===================================
     my ( $self, $params ) = &_params;
-    $self->_index( 'create',
-                   {  %Index_Defn,
-                      qs => { create  => [ 'fixed',    'opType=create' ],
-                              timeout => [ 'duration', 'timeout' ],
-                      }
-                   },
-                   ,
-                   $params
+    $self->_index(
+        'create',
+        {   %Index_Defn,
+            qs => {
+                create  => [ 'fixed',    'opType=create' ],
+                timeout => [ 'duration', 'timeout' ],
+            }
+        },
+        ,
+        $params
     );
 }
 
@@ -149,21 +155,23 @@ sub _index {
 #===================================
 sub delete {
 #===================================
-    shift()->_do_action( 'delete',
-                         {  method => 'DELETE',
-                            cmd    => CMD_INDEX_TYPE_ID,
-                         },
-                         @_
+    shift()->_do_action(
+        'delete',
+        {   method => 'DELETE',
+            cmd    => CMD_INDEX_TYPE_ID,
+        },
+        @_
     );
 }
 
-my %Search_Data = ( facets    => ['facets'],
-                    from      => ['from'],
-                    size      => ['size'],
-                    explain   => ['explain'],
-                    fields    => ['fields'],
-                    'sort'    => ['sort'],
-                    highlight => ['highlight']
+my %Search_Data = (
+    facets    => ['facets'],
+    from      => ['from'],
+    size      => ['size'],
+    explain   => ['explain'],
+    fields    => ['fields'],
+    'sort'    => ['sort'],
+    highlight => ['highlight']
 );
 my %Search_Defn = (
     cmd     => CMD_index_type,
@@ -172,8 +180,8 @@ my %Search_Defn = (
         search_type => [
             'enum',
             'searchType',
-            [  qw(  dfs_query_then_fetch     dfs_query_and_fetch
-                   query_then_fetch         query_and_fetch)
+            [   qw(  dfs_query_then_fetch     dfs_query_and_fetch
+                    query_then_fetch         query_and_fetch)
             ]
         ],
         scroll    => [ 'duration', 'scroll' ],
@@ -182,17 +190,18 @@ my %Search_Defn = (
     data => { %Search_Data, query => ['query'] }
 );
 
-my %Query_Defn = ( bool          => ['bool'],
-                   constantScore => [ 'constant_score', 'constantScore' ],
-                   disMax        => [ 'dis_max', 'disMax' ],
-                   field         => ['field'],
-                   filtered      => ['filtered'],
-                   matchAll      => [ 'match_all', 'matchAll' ],
-                   prefix        => ['prefix'],
-                   queryString   => [ 'query_string', 'queryString' ],
-                   range         => ['range'],
-                   term          => ['term'],
-                   wildcard      => ['wildcard'],
+my %Query_Defn = (
+    bool          => ['bool'],
+    constantScore => [ 'constant_score', 'constantScore' ],
+    disMax        => [ 'dis_max', 'disMax' ],
+    field         => ['field'],
+    filtered      => ['filtered'],
+    matchAll      => [ 'match_all', 'matchAll' ],
+    prefix        => ['prefix'],
+    queryString   => [ 'query_string', 'queryString' ],
+    range         => ['range'],
+    term          => ['term'],
+    wildcard      => ['wildcard'],
 );
 
 #===================================
@@ -202,120 +211,121 @@ sub search { shift()->_do_action( 'search', \%Search_Defn, @_ ) }
 #===================================
 sub delete_by_query {
 #===================================
-    shift()->_do_action( 'delete_by_query',
-                         {  %Search_Defn,
-                            method  => 'DELETE',
-                            postfix => '_query',
-                            data    => \%Query_Defn,
-                         },
-                         @_
+    shift()->_do_action(
+        'delete_by_query',
+        {   %Search_Defn,
+            method  => 'DELETE',
+            postfix => '_query',
+            data    => \%Query_Defn,
+        },
+        @_
     );
 }
 
 #===================================
 sub count {
 #===================================
-    shift()->_do_action( 'count',
-                         {  %Search_Defn,
-                            postfix => '_count',
-                            data    => \%Query_Defn,
-                         },
-                         @_
+    shift()->_do_action(
+        'count',
+        {   %Search_Defn,
+            postfix => '_count',
+            data    => \%Query_Defn,
+        },
+        @_
     );
 }
 
 #===================================
 sub terms {
 #===================================
-    shift()->_do_action( 'terms',
-                         {  cmd     => CMD_index,
-                            postfix => '_terms',
-                            qs      => {
-                                'fields' => [ 'flatten', 'fields' ],
-                                'from'   => [ 'string',  'from' ],
-                                'to'     => [ 'string',  'to' ],
-                                'from_inclusive' =>
-                                    [ 'boolean', '', 'fromInclusive=false' ],
-                                'to_inclusive' =>
-                                    [ 'boolean', '', 'toInclusive=false' ],
-                                'prefix'   => [ 'string', 'prefix' ],
-                                'regexp'   => [ 'string', 'regexp' ],
-                                'min_freq' => [ 'int',    'minFreq' ],
-                                'max_freq' => [ 'int',    'maxFreq' ],
-                                'size'     => [ 'int',    'size' ],
-                                'sort' => [ 'enum', 'sort', [qw(term freq)] ],
-                            }
-                         },
-                         @_
+    shift()->_do_action(
+        'terms',
+        {   cmd     => CMD_index,
+            postfix => '_terms',
+            qs      => {
+                'fields'         => [ 'flatten', 'fields' ],
+                'from'           => [ 'string',  'from' ],
+                'to'             => [ 'string',  'to' ],
+                'from_inclusive' => [ 'boolean', '', 'fromInclusive=false' ],
+                'to_inclusive'   => [ 'boolean', '', 'toInclusive=false' ],
+                'prefix'         => [ 'string',  'prefix' ],
+                'regexp'         => [ 'string',  'regexp' ],
+                'min_freq'       => [ 'int',     'minFreq' ],
+                'max_freq'       => [ 'int',     'maxFreq' ],
+                'size'           => [ 'int',     'size' ],
+                'sort'           => [ 'enum',    'sort', [qw(term freq)] ],
+            }
+        },
+        @_
     );
 }
 
 #===================================
 sub more_like_this {
 #===================================
-    shift()->_do_action( 'more_like_this',
-                         {  cmd    => CMD_INDEX_TYPE_ID,
-                            method => 'GET',
-                            qs     => {
-                                %{ $Search_Defn{qs} },
-                                mlt_fields => [ 'flatten', 'mltFields' ],
-                                pct_terms_to_match =>
-                                    [ 'float', 'percentTermsToMatch ' ],
-                                min_term_freq =>
-                                    [ 'int', 'minTermFrequency' ],
-                                max_query_terms => [ 'int', 'maxQueryTerms' ],
-                                stop_words   => [ 'flatten', 'stopWords' ],
-                                min_doc_freq => [ 'int',     'minDocFreq' ],
-                                max_doc_freq => [ 'int',     'maxDocFreq' ],
-                                min_word_len => [ 'int',     'minWordLen' ],
-                                max_word_len => [ 'int',     'maxWordLen' ],
-                                boost_factor =>
-                                    [ 'float', 'boostTermsFactor' ],
-                                boost_terms => [ 'boolean', 'boostTerms=true',
-                                                 'boostTerms=false'
-                                ],
-                            },
-                            data    => 'data',
-                            postfix => '_moreLikeThis',
-                            data    => \%Search_Data,
-                         },
-                         @_
+    shift()->_do_action(
+        'more_like_this',
+        {   cmd    => CMD_INDEX_TYPE_ID,
+            method => 'GET',
+            qs     => {
+                %{ $Search_Defn{qs} },
+                mlt_fields         => [ 'flatten', 'mltFields' ],
+                pct_terms_to_match => [ 'float',   'percentTermsToMatch ' ],
+                min_term_freq      => [ 'int',     'minTermFrequency' ],
+                max_query_terms    => [ 'int',     'maxQueryTerms' ],
+                stop_words         => [ 'flatten', 'stopWords' ],
+                min_doc_freq       => [ 'int',     'minDocFreq' ],
+                max_doc_freq       => [ 'int',     'maxDocFreq' ],
+                min_word_len       => [ 'int',     'minWordLen' ],
+                max_word_len       => [ 'int',     'maxWordLen' ],
+                boost_factor       => [ 'float',   'boostTermsFactor' ],
+                boost_terms =>
+                    [ 'boolean', 'boostTerms=true', 'boostTerms=false' ],
+            },
+            data    => 'data',
+            postfix => '_moreLikeThis',
+            data    => \%Search_Data,
+        },
+        @_
     );
 }
 
 #===================================
 sub index_status {
 #===================================
-    shift()->_do_action( 'index_status',
-                         {  cmd     => CMD_index,
-                            postfix => '_status'
-                         },
-                         @_
+    shift()->_do_action(
+        'index_status',
+        {   cmd     => CMD_index,
+            postfix => '_status'
+        },
+        @_
     );
 }
 
 #===================================
 sub create_index {
 #===================================
-    shift()->_do_action( 'create_index',
-                         {  method  => 'PUT',
-                            cmd     => CMD_INDEX,
-                            postfix => '',
-                            data    => { index => ['defn'] },
-                         },
-                         @_
+    shift()->_do_action(
+        'create_index',
+        {   method  => 'PUT',
+            cmd     => CMD_INDEX,
+            postfix => '',
+            data    => { index => ['defn'] },
+        },
+        @_
     );
 }
 
 #===================================
 sub delete_index {
 #===================================
-    shift()->_do_action( 'delete_index',
-                         {  method  => 'DELETE',
-                            cmd     => CMD_INDEX,
-                            postfix => ''
-                         },
-                         @_
+    shift()->_do_action(
+        'delete_index',
+        {   method  => 'DELETE',
+            cmd     => CMD_INDEX,
+            postfix => ''
+        },
+        @_
     );
 }
 
@@ -329,13 +339,14 @@ sub aliases {
         $params->{actions} = [$actions];
     }
 
-    $self->_do_action( 'aliases',
-                       {  prefix => '_aliases',
-                          method => 'POST',
-                          cmd    => [],
-                          data   => { actions => 'actions' },
-                       },
-                       $params
+    $self->_do_action(
+        'aliases',
+        {   prefix => '_aliases',
+            method => 'POST',
+            cmd    => [],
+            data   => { actions => 'actions' },
+        },
+        $params
     );
 }
 
@@ -360,67 +371,70 @@ sub get_aliases {
 #===================================
 sub flush_index {
 #===================================
-    shift()->_do_action( 'flush_index',
-                         {  method  => 'POST',
-                            cmd     => CMD_index,
-                            postfix => '_flush',
-                            qs =>
-                                { refresh => [ 'boolean', 'refresh=true' ] },
-                         },
-                         @_
+    shift()->_do_action(
+        'flush_index',
+        {   method  => 'POST',
+            cmd     => CMD_index,
+            postfix => '_flush',
+            qs      => { refresh => [ 'boolean', 'refresh=true' ] },
+        },
+        @_
     );
 }
 
 #===================================
 sub refresh_index {
 #===================================
-    shift()->_do_action( 'refresh_index',
-                         {  method  => 'POST',
-                            cmd     => CMD_index,
-                            postfix => '_refresh'
-                         },
-                         @_
+    shift()->_do_action(
+        'refresh_index',
+        {   method  => 'POST',
+            cmd     => CMD_index,
+            postfix => '_refresh'
+        },
+        @_
     );
 }
 #===================================
 sub optimize_index {
 #===================================
-    shift()->_do_action( 'optimize_index',
-                         {  method  => 'POST',
-                            cmd     => CMD_index,
-                            postfix => '_optimize',
-                            qs      => {
-                                 only_deletes =>
-                                     [ 'boolean', 'onlyExpungeDeletes=true' ],
-                                 refresh => [ 'boolean', 'refresh=true' ],
-                                 flush   => [ 'boolean', 'flush=true' ]
-                            },
-                         },
-                         @_
+    shift()->_do_action(
+        'optimize_index',
+        {   method  => 'POST',
+            cmd     => CMD_index,
+            postfix => '_optimize',
+            qs      => {
+                only_deletes => [ 'boolean', 'onlyExpungeDeletes=true' ],
+                refresh      => [ 'boolean', 'refresh=true' ],
+                flush        => [ 'boolean', 'flush=true' ]
+            },
+        },
+        @_
     );
 }
 
 #===================================
 sub snapshot_index {
 #===================================
-    shift()->_do_action( 'snapshot_index',
-                         {  method  => 'POST',
-                            cmd     => CMD_index,
-                            postfix => '_gateway/snapshot'
-                         },
-                         @_
+    shift()->_do_action(
+        'snapshot_index',
+        {   method  => 'POST',
+            cmd     => CMD_index,
+            postfix => '_gateway/snapshot'
+        },
+        @_
     );
 }
 
 #===================================
 sub gateway_snapshot {
 #===================================
-    shift()->_do_action( 'gateway_snapshot',
-                         {  method  => 'POST',
-                            cmd     => CMD_index,
-                            postfix => '_gateway/snapshot'
-                         },
-                         @_
+    shift()->_do_action(
+        'gateway_snapshot',
+        {   method  => 'POST',
+            cmd     => CMD_index,
+            postfix => '_gateway/snapshot'
+        },
+        @_
     );
 }
 
@@ -430,22 +444,24 @@ sub put_mapping {
     my ( $self, $params ) = &_params;
     $params->{ignore_conflicts} = 1
         unless exists $params->{ignore_conflicts};
-    $self->_do_action( 'put_mapping',
-                       {  method  => 'PUT',
-                          cmd     => CMD_index_TYPE,
-                          postfix => '_mapping',
-                          qs      => {
-                                  timeout => [ 'duration', 'timeout' ],
-                                  ignore_conflicts => ['boolean',
-                                                       'ignoreConflicts=true',
-                                                       'ignoreConflicts=false'
-                                  ]
-                          },
-                          data => { properties => 'properties',
-                                    allField   => [ 'all_field', 'allField' ]
-                          }
-                       },
-                       $params
+    $self->_do_action(
+        'put_mapping',
+        {   method  => 'PUT',
+            cmd     => CMD_index_TYPE,
+            postfix => '_mapping',
+            qs      => {
+                timeout          => [ 'duration', 'timeout' ],
+                ignore_conflicts => [
+                    'boolean', 'ignoreConflicts=true',
+                    'ignoreConflicts=false'
+                ]
+            },
+            data => {
+                properties => 'properties',
+                allField   => [ 'all_field', 'allField' ]
+            }
+        },
+        $params
     );
 }
 
@@ -460,12 +476,10 @@ sub get_mapping {
         : defined $index && length $index ? ''
         :   "Parameter 'index' is a required value\n";
 
-    $self->throw( 'Param',
-                  $error
-                      . $self->_usage( 'get_mapping',
-                                       { cmd => CMD_INDEX_type }
-                      ),
-                  { params => $params }
+    $self->throw(
+        'Param',
+        $error . $self->_usage( 'get_mapping', { cmd => CMD_INDEX_type } ),
+        { params => $params }
     ) if $error;
 
     my $state = $self->cluster_state;
@@ -500,51 +514,48 @@ sub cluster_state {
 #===================================
 sub nodes {
 #===================================
-    shift()->_do_action( 'nodes',
-                         {  prefix => '_cluster/nodes',
-                            cmd    => CMD_nodes,
-                            qs     => {
-                                    settings => [ 'boolean', 'settings=true' ]
-                            }
-                         },
-                         @_
+    shift()->_do_action(
+        'nodes',
+        {   prefix => '_cluster/nodes',
+            cmd    => CMD_nodes,
+            qs     => { settings => [ 'boolean', 'settings=true' ] }
+        },
+        @_
     );
 }
 
 #===================================
 sub shutdown {
 #===================================
-    shift()->_do_action( 'shutdown',
-                         {  method  => 'POST',
-                            prefix  => '_cluster/nodes',
-                            cmd     => CMD_nodes,
-                            postfix => '_shutdown',
-                            qs      => { delay => [ 'duration', 'delay' ] }
-                         },
-                         @_
+    shift()->_do_action(
+        'shutdown',
+        {   method  => 'POST',
+            prefix  => '_cluster/nodes',
+            cmd     => CMD_nodes,
+            postfix => '_shutdown',
+            qs      => { delay => [ 'duration', 'delay' ] }
+        },
+        @_
     );
 }
 
 #===================================
 sub cluster_health {
 #===================================
-    shift()->_do_action( 'cluster_health',
-                         {  prefix => '_cluster/health',
-                            cmd    => CMD_index,
-                            qs     => {
-                                    level => [ 'enum', 'level',
-                                               [qw(cluster indices shards)]
-                                    ],
-                                    wait_for_status => [
-                                                      'enum', 'waitForStatus',
-                                                      [qw(green yellow red)]
-                                    ],
-                                    wait_for_relocating_shards =>
-                                        [ 'int', 'waitForRelocatingShards' ],
-                                    timeout => [ 'duration', 'timeout' ]
-                            }
-                         },
-                         @_
+    shift()->_do_action(
+        'cluster_health',
+        {   prefix => '_cluster/health',
+            cmd    => CMD_index,
+            qs     => {
+                level => [ 'enum', 'level', [qw(cluster indices shards)] ],
+                wait_for_status =>
+                    [ 'enum', 'waitForStatus', [qw(green yellow red)] ],
+                wait_for_relocating_shards =>
+                    [ 'int', 'waitForRelocatingShards' ],
+                timeout => [ 'duration', 'timeout' ]
+            }
+        },
+        @_
     );
 }
 
@@ -571,17 +582,18 @@ sub _do_action {
         1;
     } or $error = $@ || 'Unknown error';
 
-    $self->throw( 'Param',
-                  $error . $self->_usage( $action, $defn ),
-                  { params => $original_params } )
-        if $error;
+    $self->throw(
+        'Param',
+        $error . $self->_usage( $action, $defn ),
+        { params => $original_params }
+    ) if $error;
 
-    return
-        $self->request( { method => $defn->{method} || 'GET',
-                          cmd    => $cmd,
-                          data   => $data,
-                        }
-        );
+    return $self->request( {
+            method => $defn->{method} || 'GET',
+            cmd    => $cmd,
+            data   => $data,
+        }
+    );
 }
 
 #===================================
@@ -602,13 +614,13 @@ sub _usage {
 
         my $required = $type == ONE_REQ ? 'required' : 'optional';
         $usage .= sprintf( "  - %-20s =>  %-45s # %s\n",
-                           $key, $arg_format, $required );
+            $key, $arg_format, $required );
     }
     if ( my $qs = $defn->{qs} ) {
         for ( sort keys %$qs ) {
             my $arg_format = $QS_Format{ $qs->{$_}[0] };
             $usage .= sprintf( "  - %-20s =>  %-45s # optional\n", $_,
-                               $arg_format );
+                $arg_format );
         }
     }
 
@@ -619,9 +631,11 @@ sub _usage {
             values %$data;
 
         for (@keys) {
-            $usage .= sprintf( "  - %-20s =>  %-45s # %s\n",
-                               $_->[0], '{' . $_->[0] . '}',
-                               $_->[1] );
+            $usage .= sprintf(
+                "  - %-20s =>  %-45s # %s\n",
+                $_->[0], '{' . $_->[0] . '}',
+                $_->[1]
+            );
         }
     }
     return $usage;
@@ -747,10 +761,11 @@ sub refresh_servers {
         last if @live_servers;
     }
 
-    $self->throw( 'NoServers',
-                  "Could not retrieve a list of active servers: $@",
-                  { servers => \@servers } )
-        unless @live_servers;
+    $self->throw(
+        'NoServers',
+        "Could not retrieve a list of active servers: $@",
+        { servers => \@servers }
+    ) unless @live_servers;
     for (@live_servers) {
         $_ =~ m{inet\[(\S*)/(\S+):(\d+)\]};
         $_ = 'http://' . ( $1 || $2 ) . ':' . $3;
@@ -939,10 +954,11 @@ sub _params {
     my $self = shift;
     my $params;
     if ( @_ % 2 ) {
-        $self->throw( "Param",
-                      'Expecting a HASH ref or a list of key-value pairs',
-                      { params => \@_ } )
-            unless ref $_[0] eq 'HASH';
+        $self->throw(
+            "Param",
+            'Expecting a HASH ref or a list of key-value pairs',
+            { params => \@_ }
+        ) unless ref $_[0] eq 'HASH';
         $params = shift;
     }
     else {
@@ -966,11 +982,12 @@ sub throw {
 
     my $debug = ref $self ? $self->debug : 1;
     my ( undef, $file, $line ) = caller(0);
-    my $error = bless { -text       => $msg,
-                        -line       => $line,
-                        -file       => $file,
-                        -vars       => $vars,
-                        -stacktrace => $debug ? _stack_trace() : ''
+    my $error = bless {
+        -text       => $msg,
+        -line       => $line,
+        -file       => $file,
+        -vars       => $vars,
+        -stacktrace => $debug ? _stack_trace() : ''
     }, $error_class;
 
     die $error;
@@ -983,7 +1000,7 @@ sub _stack_trace {
     my $line = ( '-' x 60 ) . "\n";
     my $o    = $line
         . sprintf( "%-4s %-30s %-5s %s\n",
-                   ( '#', 'Package', 'Line', 'Sub-routine' ) )
+        ( '#', 'Package', 'Line', 'Sub-routine' ) )
         . $line;
     while ( my @caller = caller($i) ) {
         $o .= sprintf( "%-4d %-30s %4d  %s\n", $i++, @caller[ 0, 2, 3 ] );
@@ -1010,7 +1027,7 @@ sub trace_calls {
 
             open my $fh, ">$file"
                 or $self->throw( 'Internal',
-                              "Couldn't open '$file' for trace logging: $!" );
+                "Couldn't open '$file' for trace logging: $!" );
             binmode( $fh, ':utf8' );
             $fh->autoflush(1);
             $self->JSON->pretty(1);
@@ -1054,9 +1071,10 @@ sub stringify {
         . ' line '
         . $error->{-line} . " : \n"
         . ( $error->{-text} || 'Missing error message' ) . "\n"
-        . ( $error->{-vars}
-            ? "With vars:\n" . Dumper( $error->{-vars} ) . "\n"
-            : ''
+        . (
+        $error->{-vars}
+        ? "With vars:\n" . Dumper( $error->{-vars} ) . "\n"
+        : ''
         ) . $error->{-stacktrace};
     return $msg;
 }
