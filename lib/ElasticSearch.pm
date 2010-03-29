@@ -197,6 +197,8 @@ my %Query_Defn = (
     field         => ['field'],
     filtered      => ['filtered'],
     matchAll      => [ 'match_all', 'matchAll' ],
+    moreLikeThis => ['more_like_this','moreLikeThis'],
+    moreLikeThisField => ['more_like_this_field','moreLikeThisField'],
     prefix        => ['prefix'],
     queryString   => [ 'query_string', 'queryString' ],
     range         => ['range'],
@@ -1399,6 +1401,8 @@ L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/69>
       | field
       | filtered
       | match_all
+      | more_like_this
+      | more_like_this_field
       | query_string
       | prefix
       | range
@@ -1431,6 +1435,8 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
       | prefix
       | wildcard
       | match_all
+      | more_like_this
+      | more_like_this_field
       | query_string
       | bool
       | disMax
@@ -1688,9 +1694,10 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/opt
     $result = $e->put_mapping(
         index               => multi,
         type                => single,
-        properties          => { ... }      # required
-        timeout             => '5m' | '10s' # optional,
-        ignore_conflicts    => 1 | 0,       # optional, default '1'
+        all_field           => { ... },
+        properties          => { ... },      # required
+        timeout             => '5m' | '10s', # optional
+        ignore_conflicts    => 1 | 0,        # optional, default '1'
     );
 
 A C<mapping> is the data definition of a C<type>.  If no mapping has been
