@@ -115,6 +115,7 @@ sub index {
     my ( $self, $params ) = &_params;
     $self->_index( 'index', \%Index_Defn, $params );
 }
+
 #===================================
 sub set {
 #===================================
@@ -156,6 +157,14 @@ sub delete {
     );
 }
 
+my %Search_Data = ( facets    => ['facets'],
+                    from      => ['from'],
+                    size      => ['size'],
+                    explain   => ['explain'],
+                    fields    => ['fields'],
+                    'sort'    => ['sort'],
+                    highlight => ['highlight']
+);
 my %Search_Defn = (
     cmd     => CMD_index_type,
     postfix => '_search',
@@ -167,27 +176,23 @@ my %Search_Defn = (
                    query_then_fetch         query_and_fetch)
             ]
         ],
+        scroll    => [ 'duration', 'scroll' ],
+        scroll_id => [ 'string',   'scrollId' ],
     },
-    data => { query   => ['query'],
-              facets  => ['facets'],
-              from    => ['from'],
-              size    => ['size'],
-              explain => ['explain'],
-              fields  => ['fields'],
-              'sort'  => ['sort'],
-    }
+    data => { %Search_Data, query => ['query'] }
 );
 
-my %Query_Defn = ( term          => ['term'],
-                   range         => ['range'],
-                   prefix        => ['prefix'],
-                   wildcard      => ['wildcard'],
-                   matchAll      => [ 'match_all', 'matchAll' ],
-                   queryString   => [ 'query_string', 'queryString' ],
-                   bool          => ['bool'],
-                   disMax        => [ 'dis_max', 'disMax' ],
+my %Query_Defn = ( bool          => ['bool'],
                    constantScore => [ 'constant_score', 'constantScore' ],
-                   filteredQuery => [ 'filtered_query', 'filteredQuery' ]
+                   disMax        => [ 'dis_max', 'disMax' ],
+                   field         => ['field'],
+                   filtered      => ['filtered'],
+                   matchAll      => [ 'match_all', 'matchAll' ],
+                   prefix        => ['prefix'],
+                   queryString   => [ 'query_string', 'queryString' ],
+                   range         => ['range'],
+                   term          => ['term'],
+                   wildcard      => ['wildcard'],
 );
 
 #===================================
@@ -222,36 +227,59 @@ sub count {
 #===================================
 sub terms {
 #===================================
-    my ( $self, $params ) = &_params;
-
-    $self->throw( 'Param', "'fields' is a required value" )
-        unless $params->{fields};
-
-    $params->{exclude_to} ||= 0;
-    $params->{exclude_to} ||= 0;
-
-    $self->_do_action( 'terms',
-                       {  cmd     => CMD_index,
-                          postfix => '_terms',
-                          qs      => {
+    shift()->_do_action( 'terms',
+                         {  cmd     => CMD_index,
+                            postfix => '_terms',
+                            qs      => {
                                 'fields' => [ 'flatten', 'fields' ],
                                 'from'   => [ 'string',  'from' ],
                                 'to'     => [ 'string',  'to' ],
-                                'exclude_from' =>
-                                    [ 'boolean', 'fromInclusive=false' ],
-                                'exclude_to' => [
-                                               'boolean', 'toInclusive=false',
-                                               'toInclusive=true'
-                                ],
+                                'from_inclusive' =>
+                                    [ 'boolean', '', 'fromInclusive=false' ],
+                                'to_inclusive' =>
+                                    [ 'boolean', '', 'toInclusive=false' ],
                                 'prefix'   => [ 'string', 'prefix' ],
                                 'regexp'   => [ 'string', 'regexp' ],
                                 'min_freq' => [ 'int',    'minFreq' ],
                                 'max_freq' => [ 'int',    'maxFreq' ],
                                 'size'     => [ 'int',    'size' ],
                                 'sort' => [ 'enum', 'sort', [qw(term freq)] ],
-                          }
-                       },
-                       @_
+                            }
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub more_like_this {
+#===================================
+    shift()->_do_action( 'more_like_this',
+                         {  cmd    => CMD_INDEX_TYPE_ID,
+                            method => 'GET',
+                            qs     => {
+                                %{ $Search_Defn{qs} },
+                                mlt_fields => [ 'flatten', 'mltFields' ],
+                                pct_terms_to_match =>
+                                    [ 'float', 'percentTermsToMatch ' ],
+                                min_term_freq =>
+                                    [ 'int', 'minTermFrequency' ],
+                                max_query_terms => [ 'int', 'maxQueryTerms' ],
+                                stop_words   => [ 'flatten', 'stopWords' ],
+                                min_doc_freq => [ 'int',     'minDocFreq' ],
+                                max_doc_freq => [ 'int',     'maxDocFreq' ],
+                                min_word_len => [ 'int',     'minWordLen' ],
+                                max_word_len => [ 'int',     'maxWordLen' ],
+                                boost_factor =>
+                                    [ 'float', 'boostTermsFactor' ],
+                                boost_terms => [ 'boolean', 'boostTerms=true',
+                                                 'boostTerms=false'
+                                ],
+                            },
+                            data    => 'data',
+                            postfix => '_moreLikeThis',
+                            data    => \%Search_Data,
+                         },
+                         @_
     );
 }
 
@@ -289,6 +317,44 @@ sub delete_index {
                          },
                          @_
     );
+}
+
+#===================================
+sub aliases {
+#===================================
+    my $self    = shift;
+    my $params  = $self->_params(@_);
+    my $actions = $params->{actions};
+    if ( defined $actions && ref $actions ne 'ARRAY' ) {
+        $params->{actions} = [$actions];
+    }
+
+    $self->_do_action( 'aliases',
+                       {  prefix => '_aliases',
+                          method => 'POST',
+                          cmd    => [],
+                          data   => { actions => 'actions' },
+                       },
+                       $params
+    );
+}
+
+#===================================
+sub get_aliases {
+#===================================
+    my ( $self, $params ) = &_params;
+    my $results = $self->index_status($params);
+    my $indices = $results->{indices};
+    my %aliases = ( indices => {}, aliases => {} );
+    foreach my $index ( keys %$indices ) {
+        my $aliases = $indices->{$index}{aliases};
+        $aliases{indices}{$index} = $aliases;
+        for (@$aliases) {
+            push @{ $aliases{aliases}{$_} }, $index;
+        }
+
+    }
+    return \%aliases;
 }
 
 #===================================
@@ -375,7 +441,9 @@ sub put_mapping {
                                                        'ignoreConflicts=false'
                                   ]
                           },
-                          data => { properties => 'properties' }
+                          data => { properties => 'properties',
+                                    allField   => [ 'all_field', 'allField' ]
+                          }
                        },
                        $params
     );
@@ -438,6 +506,20 @@ sub nodes {
                             qs     => {
                                     settings => [ 'boolean', 'settings=true' ]
                             }
+                         },
+                         @_
+    );
+}
+
+#===================================
+sub shutdown {
+#===================================
+    shift()->_do_action( 'shutdown',
+                         {  method  => 'POST',
+                            prefix  => '_cluster/nodes',
+                            cmd     => CMD_nodes,
+                            postfix => '_shutdown',
+                            qs      => { delay => [ 'duration', 'delay' ] }
                          },
                          @_
     );
@@ -519,13 +601,13 @@ sub _usage {
             :                    "\$$key | [\$${key}_1,\$${key}_n]";
 
         my $required = $type == ONE_REQ ? 'required' : 'optional';
-        $usage .= sprintf( "  - %-15s =>  %-45s # %s\n",
+        $usage .= sprintf( "  - %-20s =>  %-45s # %s\n",
                            $key, $arg_format, $required );
     }
     if ( my $qs = $defn->{qs} ) {
         for ( sort keys %$qs ) {
             my $arg_format = $QS_Format{ $qs->{$_}[0] };
-            $usage .= sprintf( "  - %-15s =>  %-45s # optional\n", $_,
+            $usage .= sprintf( "  - %-20s =>  %-45s # optional\n", $_,
                                $arg_format );
         }
     }
@@ -537,10 +619,9 @@ sub _usage {
             values %$data;
 
         for (@keys) {
-            $usage .=
-                sprintf( "  - %-15s =>  %-45s # %s\n",
-                         $_->[0], '{' . $_->[0] . '}',
-                         $_->[1] );
+            $usage .= sprintf( "  - %-20s =>  %-45s # %s\n",
+                               $_->[0], '{' . $_->[0] . '}',
+                               $_->[1] );
         }
     }
     return $usage;
@@ -843,7 +924,7 @@ sub _log_result {
         my $line = shift @lines;
         if ( length $line > 65 ) {
             my ($spaces) = ( $line =~ /^(?:> )?(\s*)/ );
-            $spaces = substr($spaces,0,20) if length $spaces > 20;
+            $spaces = substr( $spaces, 0, 20 ) if length $spaces > 20;
             unshift @lines, '> ' . $spaces . substr( $line, 65 );
             $line = substr $line, 0, 65;
         }
@@ -986,7 +1067,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.05 - this is an alpha release
+Version 0.06 - this is an alpha release
 
 =cut
 
@@ -1198,7 +1279,9 @@ C<set()> is a synonym for L</"index()">
 
 =head3 C<create()>
 
-C<create> is a synonym for L</"index()"> but sets C<create> to C<true>
+C<create> is a synonym for L</"index()"> but sets C<create> to C<true>. This
+means that ElasticSearch doesn't need to check whether the index/type/id already
+exists, and speeds up the indexing process.
 
 =head3 C<get()>
 
@@ -1227,7 +1310,7 @@ Example:
     }
 
 See also: L<KNOWN ISSUES>,
-          L<http://www.elasticsearch.com/docs/elasticsearch/json_api/get>
+          L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/get>
 
 =head3 C<delete()>
 
@@ -1244,7 +1327,7 @@ Example:
 
     $e->delete( index => 'twitter', type => 'tweet', id => 1);
 
-See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete>
+See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/delete>
 
 =cut
 
@@ -1263,6 +1346,9 @@ See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete>
         from            => $start_from          # optional
         size            => $no_of_results       # optional
         sort            => ['score',$field_1]   # optional
+        scroll          => '5m' | '30s'         # optional
+        scroll_id       => $scroll_id           # optional
+        highlight       => { highlight }        # optional
     );
 
 Searches for all documents matching the query. Documents can be matched
@@ -1275,9 +1361,10 @@ against multiple indices and multiple types, eg:
     );
 
 For all of the options that can be included in the C<query> parameter, see
-L<ElasticSearch::QueryDSL>,
-L<http://www.elasticsearch.com/docs/elasticsearch/json_api/search> and
-L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search>,
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>,
+L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/77> and
+L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/69>
 
 
 =head3 C<count()>
@@ -1286,16 +1373,17 @@ L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
         index           => multi,
         type            => multi,
 
-        term
-      | range
-      | prefix
-      | wildcard
+        bool
+      | constantScore
+      | disMax
+      | field
+      | filtered
       | match_all
       | query_string
-      | bool
-      | disMax
-      | constantScore
-      | filteredQuery   => { query }
+      | prefix
+      | range
+      | term
+      | wildcard
     );
 
 Counts the number of documents matching the query. Documents can be matched
@@ -1307,8 +1395,8 @@ against multiple indices and multiple types, eg
         query   => { term => {user => 'kimchy' }}
     );
 
-See also L</"search()">, L<ElasticSearch::QueryDSL>,
-L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
+See also L</"search()">,
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/count>
 and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
 
@@ -1327,7 +1415,7 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
       | bool
       | disMax
       | constantScore
-      | filteredQuery   => { query }
+      | filtered        => { query }
     );
 
 Deletes any documents matching the query. Documents can be matched against
@@ -1339,8 +1427,8 @@ multiple indices and multiple types, eg
         term    => {user => 'kimchy' }
     );
 
-See also L</"search()">, L<ElasticSearch::QueryDSL>,
-L<http://www.elasticsearch.com/docs/elasticsearch/json_api/delete_by_query>
+See also L</"search()">,
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/delete_by_query>
 and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
 
@@ -1357,8 +1445,8 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
         ## A range of terms eg alpha - omega
         from            => 'first term',           # optional
         to              => 'last term',            # optional
-        exclude_from    => 1 | 0,                  # exclude 'from' term
-        exclude_to      => 1 | 0,                  # exclude 'to' term
+        from_inclusive  => 1 | 0                   # optional
+        to_inclusive    => 1 | 0                   # optional
 
         prefix          => 'prefix',               # terms starting with
         regexp          => 'regexp',               # terms matching ^regexp$
@@ -1375,6 +1463,54 @@ eg:
         prefix      => 'arnol'
     )
 
+See also L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/terms>
+and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
+
+=head3 C<more_like_this()>
+
+    $results = $e->more_like_this(
+        index               => single,              # required
+        type                => single,              # required
+        id                  => $id,                 # required
+
+        # optional more-like-this params
+        boost_factor         =>  float
+        boost_terms          =>  1 | 0
+        mlt_fields           =>  'scalar' or ['scalar_1', 'scalar_n']
+        max_doc_freq         =>  integer
+        max_query_terms      =>  integer
+        max_word_len         =>  integer
+        min_doc_freq         =>  integer
+        min_term_freq        =>  integer
+        min_word_len         =>  integer
+        pct_terms_to_match   =>  float
+        stop_words           =>  'scalar' or ['scalar_1', 'scalar_n']
+
+        # optional search params
+        scroll               =>  '5m' | '10s'
+        scroll_id            =>  "string"
+        search_type          =>  "predefined_value"
+        explain              =>  {explain}
+        facets               =>  {facets}
+        fields               =>  {fields}
+        from                 =>  {from}
+        highlight            =>  {highlight}
+        size                 =>  {size}
+        sort                 =>  {sort}
+
+    )
+
+More-like-this (mlt) finds related/similar documents. It is possible to run
+a search query with a C<moreLikeThis> clause (where you pass in the text
+you're trying to match), or to use this method, which uses the text of
+the document referred to by C<index/type/id>.
+
+This gets transformed into a search query, so all of the search parameters
+are also available.
+
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/more_like_this/>
+and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/moreLikeThis_query/>
+
 =cut
 
 =head2 Index Admin methods
@@ -1390,7 +1526,8 @@ Returns the status of
     $result = $e->index_status( index => ['twitter','buzz'] );
     $result = $e->index_status( index => 'twitter' );
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/status>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/status>
+
 =head3 C<create_index()>
 
     $result = $e->create_index(
@@ -1410,7 +1547,7 @@ Creates a new index, optionally setting certain paramters, eg:
 
 Throws an exception if the index already exists.
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/create_index>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/create_index>
 
 =head3 C<delete_index()>
 
@@ -1422,7 +1559,42 @@ Deletes an existing index, or throws an exception if the index doesn't exist, eg
 
     $result = $e->delete_index( index => 'twitter' );
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/delete_index>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/delete_index>
+
+=h3 C<aliases()>
+
+    $result = $e->aliases( actions => [actions] | {actions} )
+
+Adds or removes an alias for an index, eg:
+
+    $result = $e->aliases( actions => [
+                { remove => { index => 'foo', alias => 'bar' }},
+                { add    => { index => 'foo', alias => 'baz'  }}
+              ]);
+
+C<actions> can be a single HASH ref, or an ARRAY ref containing multiple HASH
+refs.
+
+See L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/88>
+
+=h3 C<get_aliases()>
+
+    $result = $e->get_aliases( index => multi )
+
+Returns a hashref listing all indices and their corresponding aliases, and
+all aliases and their corresponding indices, eg:
+
+    {
+      aliases => {
+         bar => ["foo"],
+         baz => ["foo"],
+      },
+      indices => { foo => ["baz", "bar"] },
+    }
+
+If you pass in the optional C<index> argument, which can be an index name
+or an alias name, then it will only return the indices and aliases related
+to that argument.
 
 =head3 C<flush_index()>
 
@@ -1440,7 +1612,7 @@ Example:
 
     $result = $e->flush_index( index => 'twitter' );
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/flush>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/flush>
 
 =head3 C<refresh_index()>
 
@@ -1457,7 +1629,7 @@ Example:
 
     $result = $e->refresh_index( index => 'twitter' );
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/refresh>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/refresh>
 
 =head3 C<gateway_snapshot()>
 
@@ -1473,7 +1645,7 @@ Example:
 
     $result = $e->gateway_snapshot( index => 'twitter' );
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/gateway_snapshot>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/gateway_snapshot>
 and L<http://www.elasticsearch.com/docs/elasticsearch/modules/gateway>
 
 =head3 C<snapshot_index()>
@@ -1488,6 +1660,8 @@ C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
         flush           => 1 | 0,  # flush after optmization
         refresh         => 1 | 0,  # refresh after optmization
     )
+
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/optimize>
 
 =head3 C<put_mapping()>
 
@@ -1522,7 +1696,7 @@ to specify an official C<mapping> instead, eg:
         }
     );
 
-See also: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/indices/put_mapping>
+See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/put_mapping>
 and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
 
 =head3 C<get_mapping()>
@@ -1546,6 +1720,8 @@ type(s), eg:
     );
     # { tweet => {mapping}, user => {mapping}}
 
+The index argument must be an index name, and not an alias name.
+
 =cut
 
 =head2 Cluster admin methods
@@ -1556,19 +1732,7 @@ type(s), eg:
 
 Returns cluster state information.
 
-See L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/cluster/state/>
-
-=head3 C<nodes()>
-
-    $result = $e->nodes(
-        nodes       => multi,
-        settings    => 1 | 0        # optional
-    );
-
-Returns information about one or more nodes or servers in the cluster. If
-C<settings> is C<true>, then it includes the node settings information.
-
-See: L<http://www.elasticsearch.com/docs/elasticsearch/json_api/admin/cluster/nodes_info>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/state/>
 
 =head3 C<cluster_health()>
 
@@ -1602,6 +1766,29 @@ If waiting, then a timeout can be specified.
 For example:
 
     $result = $e->cluster_health( wait_for_status => 'green', timeout => 10)
+
+=head3 C<nodes()>
+
+    $result = $e->nodes(
+        nodes       => multi,
+        settings    => 1 | 0        # optional
+    );
+
+Returns information about one or more nodes or servers in the cluster. If
+C<settings> is C<true>, then it includes the node settings information.
+
+See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/nodes_info>
+
+=head3 C<shutdown()>
+
+    $result = $e->shutdown(
+        nodes       => multi,
+        delay       => '5s' | '10m'        # optional
+    );
+
+
+Shuts down one or more nodes (or the whole cluster if no nodes specified),
+optionally with a delay.
 
 =cut
 
