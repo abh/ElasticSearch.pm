@@ -1,4 +1,14 @@
 Revision history for ElasticSearch
+0.06    2010-03-30
+      - Added more_like_this()
+      - Added more_like_this/more_like_this_field clauses to count()
+        and delete_by_query()
+      - Changed exclude_from and exclude_to to from_inclusive and to_inclusive
+        in the terms() query
+      - the filteredQuery clause renamed to 'filtered' as per a change in ES
+      - Added aliases() and get_aliases()
+      - Deleted the QueryDSL doc, as the ElasticSearch docs are much improved
+
 0.05    2010-03-04
       - Delayed connecting to the cluster until actually required (previously
         it refreshed the server list in new() )
