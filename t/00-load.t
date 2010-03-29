@@ -384,10 +384,10 @@ SKIP: {
     is $es->count(
                constant_score => { filter => { term => { text => 'foo' } } } )
         ->{count}, 16, 'Count: constantScore';
-    is $es->count( filtered_query => { query => { term => { text => 'foo' } },
+    is $es->count( filtered => { query => { term => { text => 'foo' } },
                                        filter => { term => { text => 'bar' } }
                    }
-    )->{count}, 8, 'Count: filteredQuery';
+    )->{count}, 8, 'Count: filtered';
 
     ### TERMS
     # add another foo to make the document frequency uneven
