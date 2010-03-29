@@ -191,19 +191,19 @@ my %Search_Defn = (
 );
 
 my %Query_Defn = (
-    bool          => ['bool'],
-    constantScore => [ 'constant_score', 'constantScore' ],
-    disMax        => [ 'dis_max', 'disMax' ],
-    field         => ['field'],
-    filtered      => ['filtered'],
-    matchAll      => [ 'match_all', 'matchAll' ],
-    moreLikeThis => ['more_like_this','moreLikeThis'],
-    moreLikeThisField => ['more_like_this_field','moreLikeThisField'],
-    prefix        => ['prefix'],
-    queryString   => [ 'query_string', 'queryString' ],
-    range         => ['range'],
-    term          => ['term'],
-    wildcard      => ['wildcard'],
+    bool              => ['bool'],
+    constantScore     => [ 'constant_score', 'constantScore' ],
+    disMax            => [ 'dis_max', 'disMax' ],
+    field             => ['field'],
+    filtered          => ['filtered'],
+    matchAll          => [ 'match_all', 'matchAll' ],
+    moreLikeThis      => [ 'more_like_this', 'moreLikeThis' ],
+    moreLikeThisField => [ 'more_like_this_field', 'moreLikeThisField' ],
+    prefix            => ['prefix'],
+    queryString       => [ 'query_string', 'queryString' ],
+    range             => ['range'],
+    term              => ['term'],
+    wildcard          => ['wildcard'],
 );
 
 #===================================
@@ -1587,7 +1587,7 @@ Deletes an existing index, or throws an exception if the index doesn't exist, eg
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/delete_index>
 
-=h3 C<aliases()>
+=head3 C<aliases()>
 
     $result = $e->aliases( actions => [actions] | {actions} )
 
@@ -1603,7 +1603,7 @@ refs.
 
 See L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/88>
 
-=h3 C<get_aliases()>
+=head3 C<get_aliases()>
 
     $result = $e->get_aliases( index => multi )
 
