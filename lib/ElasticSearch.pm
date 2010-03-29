@@ -33,7 +33,8 @@ our %QS_Format = ( boolean  => '1 | 0',
                    optional => "'scalar value'",
                    flatten  => "'scalar' or ['scalar_1', 'scalar_n']",
                    'int'    => "integer",
-                   'string' => '"string"',
+                   string   => '"string"',
+                   float    => 'float',
                    enum     => '"predefined_value"',
 );
 
@@ -57,6 +58,13 @@ our %QS_Formatter = (
         my $key = shift;
         eval { $int += 0; 1 } or die "'$key' is not an integer";
         return $key . '=' . $int;
+    },
+    'float' => sub {
+        my $float = shift;
+        return unless defined $float;
+        my $key = shift;
+        eval { $float += 0; 1 } or die "'$key' is not a float";
+        return $key . '=' . $float;
     },
     'string' => sub {
         my $string = shift;
