@@ -5,12 +5,16 @@ WriteMakefile
           'NAME' => 'ElasticSearch',
           'VERSION_FROM' => 'lib/ElasticSearch.pm',
           'PREREQ_PM' => {
-                           'Data::Dump' => 0,
+                           'Alien::ElasticSearch' => '0.08',
+                           'Data::Dumper' => 0,
                            'Encode' => 0,
+                           'File::Temp' => '0.22',
                            'HTTP::Request' => 0,
+                           'IO::Socket' => 0,
                            'JSON::XS' => 0,
                            'LWP::ConnCache' => 0,
                            'LWP::UserAgent' => 0,
+                           'POSIX' => 0,
                            'Test::Most' => 0
                          },
           'INSTALLDIRS' => 'site',
