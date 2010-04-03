@@ -461,18 +461,20 @@ SKIP: {
 
     is $es->count( field => { text => 'foo' } )->{count}, 16, 'Count: field';
 
-SKIP: {
-        skip "Count more_like_this differs from search ", 2;
-        is $es->count( more_like_this =>
-                { likeText => 'foo bar baz', minTermFrequency => 1 } )
-            ->{count}, 5, 'Count: more_like_this';
-        is $es->count(
-            more_like_this_field => {
-                text => { likeText => 'foo bar baz', minTermFrequency => 1 }
-            }
-        )->{count}, 5, 'Count: more_like_this';
+    is $es->count(
+        fuzzy_like_this => { fields => ['text'], likeText => 'bat' } )
+        ->{count}, 24, 'fuzzy_like_this';
 
-    }
+    is $es->count(
+        fuzzy_like_this_field => { text => { likeText => 'fooo' } } )
+        ->{count}, 16, 'fuzzy_like_this_field';
+
+    is $es->count(
+        more_like_this => { likeText => 'foo bar baz', minTermFrequency => 1 }
+    )->{count}, 10, 'Count: more_like_this';
+    is $es->count( more_like_this_field =>
+            { text => { likeText => 'foo bar baz', minTermFrequency => 1 } } )
+        ->{count}, 10, 'Count: more_like_this';
 
     ### MORE LIKE THIS
     is $es->more_like_this(
