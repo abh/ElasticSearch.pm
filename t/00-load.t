@@ -138,6 +138,12 @@ SKIP: {
         )->{ok},
         ' - with flush, refresh and only_deletes';
 
+    ### CLEAR INDEX CACHE ###
+    ok $es->clear_cache->{ok}, 'Clear all index caches';
+    ok $es->clear_cache( index => $Index )->{ok}, 'Clear just index 1';
+    ok $es->clear_cache( index => [ $Index, $Index_2 ] )->{ok},
+        'Clear index 1 and 2';
+
     ### SNAPSHOT INDEX ###
     ok $es->snapshot_index()->{ok},   'Snapshot all indices';
     ok $es->gateway_snapshot()->{ok}, ' - with gateway_snapshot';
@@ -148,8 +154,7 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } }
-        ),
+        actions => { add => { alias => 'alias_1', index => $Index } } ),
         'add alias_1';
     wait_for_es(1);
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
