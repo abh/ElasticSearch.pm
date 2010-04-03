@@ -191,19 +191,21 @@ my %Search_Defn = (
 );
 
 my %Query_Defn = (
-    bool              => ['bool'],
-    constantScore     => [ 'constant_score', 'constantScore' ],
-    disMax            => [ 'dis_max', 'disMax' ],
-    field             => ['field'],
-    filtered          => ['filtered'],
-    matchAll          => [ 'match_all', 'matchAll' ],
-    moreLikeThis      => [ 'more_like_this', 'moreLikeThis' ],
-    moreLikeThisField => [ 'more_like_this_field', 'moreLikeThisField' ],
-    prefix            => ['prefix'],
-    queryString       => [ 'query_string', 'queryString' ],
-    range             => ['range'],
-    term              => ['term'],
-    wildcard          => ['wildcard'],
+    bool               => ['bool'],
+    constantScore      => [ 'constant_score', 'constantScore' ],
+    disMax             => [ 'dis_max', 'disMax' ],
+    field              => ['field'],
+    filtered           => ['filtered'],
+    fuzzyLikeThis      => [ 'fuzzy_like_this', 'fuzzyLikeThis' ],
+    fuzzyLikeThisField => [ 'fuzzy_like_this_field', 'fuzzyLikeThisField' ],
+    matchAll           => [ 'match_all', 'matchAll' ],
+    moreLikeThis       => [ 'more_like_this', 'moreLikeThis' ],
+    moreLikeThisField  => [ 'more_like_this_field', 'moreLikeThisField' ],
+    prefix             => ['prefix'],
+    queryString        => [ 'query_string', 'queryString' ],
+    range              => ['range'],
+    term               => ['term'],
+    wildcard           => ['wildcard'],
 );
 
 #===================================
@@ -327,6 +329,19 @@ sub delete_index {
         {   method  => 'DELETE',
             cmd     => CMD_INDEX,
             postfix => ''
+        },
+        @_
+    );
+}
+
+#===================================
+sub clear_cache {
+#===================================
+    shift()->_do_action(
+        'clear_cache',
+        {   method  => 'POST',
+            cmd     => CMD_index,
+            postfix => '_cache/clear'
         },
         @_
     );
@@ -653,8 +668,9 @@ sub _build_qs {
     my @qs;
     foreach my $key ( keys %$defn ) {
         my ( $format_name, @args ) = @{ $defn->{$key} || [] };
-        next unless exists $params->{$key};
         $format_name ||= '';
+
+        next unless exists $params->{$key} || $format_name eq 'fixed';
 
         my $formatter = $QS_Formatter{$format_name}
             or die "Unknown QS formatter '$format_name'";
@@ -1029,7 +1045,7 @@ sub trace_calls {
         if ( my $file = shift ) {
             $file = '&STDERR' if $file eq "1";
 
-            open my $fh, ">$file"
+            open my $fh, ">>$file"
                 or $self->throw( 'Internal',
                 "Couldn't open '$file' for trace logging: $!" );
             binmode( $fh, ':utf8' );
@@ -1400,6 +1416,8 @@ L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/69>
       | disMax
       | field
       | filtered
+      | fuzzy_like_this
+      | fuzzy_like_this_field
       | match_all
       | more_like_this
       | more_like_this_field
@@ -1430,18 +1448,21 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
         index           => multi,
         type            => multi,
 
-        term
-      | range
-      | prefix
-      | wildcard
+        bool
+      | constantScore
+      | disMax
+      | field
+      | filtered
+      | fuzzy_like_this
+      | fuzzy_like_this_field
       | match_all
       | more_like_this
       | more_like_this_field
       | query_string
-      | bool
-      | disMax
-      | constantScore
-      | filtered        => { query }
+      | prefix
+      | range
+      | term
+      | wildcard
     );
 
 Deletes any documents matching the query. Documents can be matched against
@@ -1656,6 +1677,14 @@ Example:
     $result = $e->refresh_index( index => 'twitter' );
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/refresh>
+
+=head3 C<clear_cache()>
+
+    $result = $e->clear_cache( index => multi );
+
+Clears the caches for the specified indices (currently only the filter cache).
+
+See L<http://github.com/elasticsearch/elasticsearch/issues/issue/101>
 
 =head3 C<gateway_snapshot()>
 
