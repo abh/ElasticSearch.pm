@@ -1,5 +1,11 @@
 Revision history for ElasticSearch
-0.06    2010-03-30
+0.06    2010-04-03
+      - The test suite now requires Alien::ElasticSearch, and uses its own
+        config file and work dir, so as not to interfere with existing
+        data
+      - Added clear_cache()
+      - Added fuzzy_like_this and fuzzy_like_this_field clauses to
+        count() and delete_by_query()
       - Added more_like_this()
       - Added more_like_this/more_like_this_field clauses to count()
         and delete_by_query()

@@ -1,9 +1,17 @@
 #!perl
 
-use Test::Most qw(defer_plan);
+#use Test::Most qw(defer_plan);
+use Test::Most tests => 136;
 use Module::Build;
 use File::Spec::Functions qw(catfile);
 use POSIX 'setsid';
+use IO::Socket();
+use File::Temp();
+use Alien::ElasticSearch();
+
+my $instances = 3;
+my $Index     = 'es_test_1';
+my $Index_2   = 'es_test_2';
 
 BEGIN {
     use_ok 'ElasticSearch' || print "Bail out!";
@@ -13,14 +21,10 @@ diag("Testing ElasticSearch $ElasticSearch::VERSION, Perl $], $^X");
 
 local $SIG{INT} = sub { shutdown_servers(); };
 
-my $es      = connect_to_es();
-my $Index   = 'es_test_1';
-my $Index_2 = 'es_test_2';
-
+my $es = connect_to_es();
 SKIP: {
+    skip "ElasticSearch server not available for testing", 135 unless $es;
 
-    skip "No ElasticSearch server available", 1
-        unless $es;
     ok $es, 'Connected to an ES cluster';
     like $es->current_server, qr{http://}, 'Current server set';
 
@@ -582,7 +586,7 @@ SKIP: {
 
 }
 
-all_done;
+# all_done;
 
 sub index_test_docs {
 
@@ -653,6 +657,7 @@ sub drop_indices {
 }
 
 sub wait_for_es {
+    $es->refresh_index();
     $es->cluster_health( wait_for_status => 'green', timeout => '2s' );
     sleep $_[0] if $_[0];
 }
@@ -660,34 +665,78 @@ sub wait_for_es {
 my @PIDs;
 
 sub connect_to_es {
-    my $server = $ENV{ES_SERVER};
-    if ( !$server ) {
-        my $install_dir = eval {
-            require Alien::ElasticSearch;
-            return Alien::ElasticSearch->install_dir;
-        };
-        return unless $install_dir;
-        my $cmd = catfile( $install_dir, 'bin', 'elasticsearch' );
-        my $pid_file = File::Temp->new;
-
-        for ( 1 .. 3 ) {
-            diag "Starting test node $_";
-            if (fork) {
-                die "Can't start a new session: $!" if setsid == -1;
-                exec( $cmd, '-p', $pid_file->filename );
-
-            }
-            else {
-                sleep 1;
-                open my $pid_fh, '<', $pid_file->filename;
-                push @PIDs, <$pid_fh>;
-            }
-
-        }
-        $server = '127.0.0.1:9200';
-        diag "Waiting for servers to warm up";
-        sleep 8;
+    my $install_dir = Alien::ElasticSearch->install_dir;
+    if ( !$install_dir ) {
+        diag "";
+        diag "**** The ElasticSearch server is not installed ****";
+        diag "You can install it by typing this at the command line:";
+        diag "";
+        diag "  install_elasticsearch.pl";
+        diag "";
+        return;
     }
+
+    my @servers = map {"127.0.0.1:920$_"} 0 .. $instances - 1;
+    foreach (@servers) {
+        if ( IO::Socket::INET->new($_) ) {
+            diag "";
+            diag "*" x 60;
+            diag "There is already a server running on $_. ";
+            diag "Please shut it down before running the tests.";
+            diag "*" x 60;
+            diag "";
+            die;
+        }
+    }
+
+    my $server = $servers[0];
+
+    my $cmd = catfile( $install_dir, 'bin', 'elasticsearch' );
+    my $pid_file = File::Temp->new;
+
+    my $blank_config = File::Temp->new( SUFFIX => '.yml' );
+    my $config_path  = $blank_config->filename();
+    my $work_dir     = File::Temp->newdir();
+    my $work_path    = $work_dir->dirname;
+
+    print $blank_config <<CONFIG;
+
+cluster:    {name: es_test}
+gateway:    {type: none}
+node:       {data: true}
+http:       {enabled: true}
+path:       {work: $work_dir}
+CONFIG
+
+    for ( 1 .. $instances ) {
+        diag "Starting test node $_";
+        if (fork) {
+            die "Can't start a new session: $!" if setsid == -1;
+            exec( $cmd, '-p', $pid_file->filename,
+                '-Des.config=' . $config_path );
+        }
+        else {
+            sleep 1;
+            open my $pid_fh, '<', $pid_file->filename;
+            push @PIDs, <$pid_fh>;
+        }
+
+    }
+
+    diag "Waiting for servers to warm up";
+
+    my $timeout = 15;
+    while (@servers) {
+        sleep 1;
+        if ( IO::Socket::INET->new( $servers[0] ) ) {
+            diag "Node running on $servers[0]";
+            shift @servers;
+        }
+        $timeout--;
+        last if $timeout == 0;
+    }
+    die "Couldn't start $instances nodes" if @servers;
+
     my $es = eval {
         ElasticSearch->new( servers => $server, trace_calls => 'log' );
         }
