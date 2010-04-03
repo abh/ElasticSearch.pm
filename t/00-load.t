@@ -202,28 +202,23 @@ SKIP: {
         type  => 'test',
         id    => 1,
         data  => {
-            text => '123',
+            text => '1234',
             num  => 'foo'
         }
         ),
         'HASH', 'Create document';
 
     wait_for_es(1);
-
     ok $r->{ok}, ' - Created';
     is $r->{_id}, 1, ' - ID matches';
-SKIP: {
-        skip
-            "Creation of duplicate documents test seems to have stopped working",
-            1;
-        is $es->search(
-            index => $Index,
-            type  => 'test',
-            query => { term => { num => 'foo' } }
-            )->{hits}{total},
-            2,
-            ' - retrieved both copies query';
-    }
+
+    is $es->search(
+        index => $Index,
+        type  => 'test',
+        query => { term => { num => 'foo' } }
+        )->{hits}{total},
+        2,
+        ' - retrieved both copies query';
 
     isa_ok $r= $es->set(
         index => $Index,
