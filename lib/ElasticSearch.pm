@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 use constant {
     ONE_REQ     => 1,
@@ -107,7 +107,7 @@ sub get { shift()->_do_action( 'get', { cmd => CMD_INDEX_TYPE_ID }, @_ ) }
 my %Index_Defn = (
     cmd => CMD_INDEX_TYPE_id,
     qs  => {
-        create  => [ 'boolean',  'opType=create' ],
+        create  => [ 'boolean',  'op_type=create' ],
         timeout => [ 'duration', 'timeout' ],
     },
     data => 'data',
@@ -131,17 +131,7 @@ sub set {
 sub create {
 #===================================
     my ( $self, $params ) = &_params;
-    $self->_index(
-        'create',
-        {   %Index_Defn,
-            qs => {
-                create  => [ 'fixed',    'opType=create' ],
-                timeout => [ 'duration', 'timeout' ],
-            }
-        },
-        ,
-        $params
-    );
+    $self->_index( 'create', { %Index_Defn, postfix => '_create' }, $params );
 }
 
 #===================================
@@ -179,33 +169,33 @@ my %Search_Defn = (
     qs      => {
         search_type => [
             'enum',
-            'searchType',
+            'search_type',
             [   qw(  dfs_query_then_fetch     dfs_query_and_fetch
                     query_then_fetch         query_and_fetch)
             ]
         ],
         scroll    => [ 'duration', 'scroll' ],
-        scroll_id => [ 'string',   'scrollId' ],
+        scroll_id => [ 'string',   'scroll_id' ],
     },
     data => { %Search_Data, query => ['query'] }
 );
 
 my %Query_Defn = (
-    bool               => ['bool'],
-    constantScore      => [ 'constant_score', 'constantScore' ],
-    disMax             => [ 'dis_max', 'disMax' ],
-    field              => ['field'],
-    filtered           => ['filtered'],
-    fuzzyLikeThis      => [ 'fuzzy_like_this', 'fuzzyLikeThis' ],
-    fuzzyLikeThisField => [ 'fuzzy_like_this_field', 'fuzzyLikeThisField' ],
-    matchAll           => [ 'match_all', 'matchAll' ],
-    moreLikeThis       => [ 'more_like_this', 'moreLikeThis' ],
-    moreLikeThisField  => [ 'more_like_this_field', 'moreLikeThisField' ],
-    prefix             => ['prefix'],
-    queryString        => [ 'query_string', 'queryString' ],
-    range              => ['range'],
-    term               => ['term'],
-    wildcard           => ['wildcard'],
+    bool           => ['bool'],
+    constant_score => ['constant_score'],
+    dis_max        => ['dis_max'],
+    field          => ['field'],
+    filtered       => ['filtered'],
+    flt            => [ 'flt', 'fuzzy_like_this' ],
+    flt_field      => [ 'flt_field', 'fuzzy_like_this_field' ],
+    match_all      => ['match_all'],
+    mlt            => [ 'mlt', 'more_like_this' ],
+    mlt_field      => [ 'mlt_field', 'more_like_this_field' ],
+    prefix         => ['prefix'],
+    query_string   => ['query_string'],
+    range          => ['range'],
+    term           => ['term'],
+    wildcard       => ['wildcard'],
 );
 
 #===================================
@@ -247,18 +237,17 @@ sub terms {
         {   cmd     => CMD_index,
             postfix => '_terms',
             qs      => {
-                'fields' => [ 'flatten', 'fields' ],
-                'from'   => [ 'string',  'from' ],
-                'to'     => [ 'string',  'to' ],
-                'from_inclusive' =>
-                    [ 'boolean', undef, 'fromInclusive=false' ],
-                'to_inclusive' => [ 'boolean', undef, 'toInclusive=false' ],
-                'prefix'   => [ 'string', 'prefix' ],
-                'regexp'   => [ 'string', 'regexp' ],
-                'min_freq' => [ 'int',    'minFreq' ],
-                'max_freq' => [ 'int',    'maxFreq' ],
-                'size'     => [ 'int',    'size' ],
-                'sort'     => [ 'enum',   'sort', [qw(term freq)] ],
+                'fields'   => [ 'flatten', 'fields' ],
+                'gt'       => [ 'string',  'gt' ],
+                'lt'       => [ 'string',  'lt' ],
+                'gte'      => [ 'string',  'gte' ],
+                'lte'      => [ 'string',  'lte' ],
+                'prefix'   => [ 'string',  'prefix' ],
+                'regexp'   => [ 'string',  'regexp' ],
+                'min_freq' => [ 'int',     'min_freq' ],
+                'max_freq' => [ 'int',     'max_freq' ],
+                'size'     => [ 'int',     'size' ],
+                'sort'     => [ 'enum',    'sort', [qw(term freq)] ],
             }
         },
         @_
@@ -266,29 +255,27 @@ sub terms {
 }
 
 #===================================
-sub more_like_this {
+sub mlt {
 #===================================
     shift()->_do_action(
-        'more_like_this',
+        'mlt',
         {   cmd    => CMD_INDEX_TYPE_ID,
             method => 'GET',
             qs     => {
                 %{ $Search_Defn{qs} },
-                mlt_fields         => [ 'flatten', 'mltFields' ],
-                pct_terms_to_match => [ 'float',   'percentTermsToMatch ' ],
-                min_term_freq      => [ 'int',     'minTermFrequency' ],
-                max_query_terms    => [ 'int',     'maxQueryTerms' ],
-                stop_words         => [ 'flatten', 'stopWords' ],
-                min_doc_freq       => [ 'int',     'minDocFreq' ],
-                max_doc_freq       => [ 'int',     'maxDocFreq' ],
-                min_word_len       => [ 'int',     'minWordLen' ],
-                max_word_len       => [ 'int',     'maxWordLen' ],
-                boost_factor       => [ 'float',   'boostTermsFactor' ],
-                boost_terms =>
-                    [ 'boolean', 'boostTerms=true', 'boostTerms=false' ],
+                mlt_fields => [ 'flatten', 'mlt_fields' ],
+                pct_terms_to_match => [ 'float', 'percent_terms_to_match ' ],
+                min_term_freq      => [ 'int',   'min_term_freq' ],
+                max_query_terms    => [ 'int',   'max_query_terms' ],
+                stop_words   => [ 'flatten', 'stop_words' ],
+                min_doc_freq => [ 'int',     'min_doc_freq' ],
+                max_doc_freq => [ 'int',     'max_doc_freq' ],
+                min_word_len => [ 'int',     'min_word_len' ],
+                max_word_len => [ 'int',     'max_word_len' ],
+                boost_terms  => [ 'float',   'boost_terms' ],
             },
             data    => 'data',
-            postfix => '_moreLikeThis',
+            postfix => '_mlt',
             data    => \%Search_Data,
         },
         @_
@@ -421,7 +408,7 @@ sub optimize_index {
             cmd     => CMD_index,
             postfix => '_optimize',
             qs      => {
-                only_deletes => [ 'boolean', 'onlyExpungeDeletes=true' ],
+                only_deletes => [ 'boolean', 'only_expunge_deletes=true' ],
                 refresh      => [ 'boolean', 'refresh=true' ],
                 flush        => [ 'boolean', 'flush=true' ]
             },
@@ -460,8 +447,6 @@ sub gateway_snapshot {
 sub put_mapping {
 #===================================
     my ( $self, $params ) = &_params;
-    $params->{ignore_conflicts} = 1
-        unless exists $params->{ignore_conflicts};
     $self->_do_action(
         'put_mapping',
         {   method  => 'PUT',
@@ -469,14 +454,11 @@ sub put_mapping {
             postfix => '_mapping',
             qs      => {
                 timeout          => [ 'duration', 'timeout' ],
-                ignore_conflicts => [
-                    'boolean', 'ignoreConflicts=true',
-                    'ignoreConflicts=false'
-                ]
+                ignore_conflicts => [ 'boolean',  'ignore_conflicts=true' ]
             },
             data => {
                 properties => 'properties',
-                allField   => [ 'all_field', 'allField' ]
+                allField   => ['all_field']
             }
         },
         $params
@@ -567,9 +549,9 @@ sub cluster_health {
             qs     => {
                 level => [ 'enum', 'level', [qw(cluster indices shards)] ],
                 wait_for_status =>
-                    [ 'enum', 'waitForStatus', [qw(green yellow red)] ],
+                    [ 'enum', 'wait_for_status', [qw(green yellow red)] ],
                 wait_for_relocating_shards =>
-                    [ 'int', 'waitForRelocatingShards' ],
+                    [ 'int', 'wait_for_relocating_shards' ],
                 timeout => [ 'duration', 'timeout' ]
             }
         },
@@ -1105,7 +1087,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.06 - this is an alpha release
+Version 0.07 - this is an alpha release
 
 =cut
 
@@ -1144,7 +1126,7 @@ a randomly chosen node in the list.
         id    => 1,
         data  => {
             user        => 'kimchy',
-            postDate    => '2009-11-15T14:12:12',
+            post_date   => '2009-11-15T14:12:12',
             message     => 'trying out Elastic Search'
         }
     );
@@ -1279,7 +1261,7 @@ eg:
         id      => 1,
         data    => {
             user        => 'kimchy',
-            postDate    => '2009-11-15T14:12:12',
+            post_date   => '2009-11-15T14:12:12',
             message     => 'trying out Elastic Search'
         },
     );
@@ -1317,9 +1299,8 @@ C<set()> is a synonym for L</"index()">
 
 =head3 C<create()>
 
-C<create> is a synonym for L</"index()"> but sets C<create> to C<true>. This
-means that ElasticSearch doesn't need to check whether the index/type/id already
-exists, and speeds up the indexing process.
+C<create> is a synonym for L</"index()"> but creates instead of first checking
+whether the doc already exists. This speeds up the indexing process.
 
 =head3 C<get()>
 
@@ -1341,7 +1322,7 @@ Example:
       _index  => "twitter",
       _source => {
                    message => "trying out Elastic Search",
-                   postDate => "2009-11-15T14:12:12",
+                   post_date=> "2009-11-15T14:12:12",
                    user => "kimchy",
                  },
       _type   => "tweet",
@@ -1416,11 +1397,11 @@ L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/69>
       | disMax
       | field
       | filtered
-      | fuzzy_like_this
-      | fuzzy_like_this_field
+      | flt
+      | flt_field
       | match_all
-      | more_like_this
-      | more_like_this_field
+      | mlt
+      | mlt_field
       | query_string
       | prefix
       | range
@@ -1453,11 +1434,11 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
       | disMax
       | field
       | filtered
-      | fuzzy_like_this
-      | fuzzy_like_this_field
+      | flt
+      | flt_field
       | match_all
-      | more_like_this
-      | more_like_this_field
+      | mlt
+      | mlt_field
       | query_string
       | prefix
       | range
@@ -1513,16 +1494,17 @@ eg:
 See also L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/terms>
 and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
-=head3 C<more_like_this()>
+=head3 C<mlt()>
 
-    $results = $e->more_like_this(
+    # mlt == more_like_this
+
+    $results = $e->mlt(
         index               => single,              # required
         type                => single,              # required
         id                  => $id,                 # required
 
         # optional more-like-this params
-        boost_factor         =>  float
-        boost_terms          =>  1 | 0
+        boost_terms          =>  float
         mlt_fields           =>  'scalar' or ['scalar_1', 'scalar_n']
         max_doc_freq         =>  integer
         max_query_terms      =>  integer
@@ -1587,8 +1569,8 @@ Creates a new index, optionally setting certain paramters, eg:
     $result = $e->create_index(
         index   => 'twitter',
         defn    => {
-                numberOfShards      => 3,
-                numberOfReplicas    => 2,
+                number_of_shards      => 3,
+                number_of_replicas    => 2,
         }
     );
 
@@ -1711,7 +1693,7 @@ C<snapshot_index()> is a synonym for L</"gateway_snapshot()">
 
     $result = $e->optimize_index(
         index           => multi,
-        only_deletes    => 1 | 0,  # onlyExpungeDeletes
+        only_deletes    => 1 | 0,  # only_expunge_deletes
         flush           => 1 | 0,  # flush after optmization
         refresh         => 1 | 0,  # refresh after optmization
     )
@@ -1726,7 +1708,7 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/opt
         all_field           => { ... },
         properties          => { ... },      # required
         timeout             => '5m' | '10s', # optional
-        ignore_conflicts    => 1 | 0,        # optional, default '1'
+        ignore_conflicts    => 1 | 0,        # optional
     );
 
 A C<mapping> is the data definition of a C<type>.  If no mapping has been
@@ -1746,7 +1728,7 @@ to specify an official C<mapping> instead, eg:
         properties  =>  {
             user        =>  {type  =>  "string", index      =>  "not_analyzed"},
             message     =>  {type  =>  "string", nullValue  =>  "na"},
-            postDate    =>  {type  =>  "date"},
+            post_date   =>  {type  =>  "date"},
             priority    =>  {type  =>  "integer"},
             rank        =>  {type  =>  "float"}
         }
@@ -1793,11 +1775,11 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/sta
 =head3 C<cluster_health()>
 
     $result = $e->cluster_health(
-        index           => multi,
-        level           => 'cluster' | 'indices' | 'shards',
-        wait_for_status => 'red' | 'yellow' | 'green',
-        | wait_for_relocating_shards => $number_of_shards,
-        timeout         => $seconds
+        index                         => multi,
+        level                         => 'cluster' | 'indices' | 'shards',
+        wait_for_status               => 'red' | 'yellow' | 'green',
+        | wait_for_relocating_shards  => $number_of_shards,
+        timeout                       => $seconds
     );
 
 Returns the status of the cluster, or index|indices or shards, where the
@@ -1982,16 +1964,16 @@ Example: C<< $e->nodes() >> is logged as:
     #    "clusterName" : "elasticsearch",
     #    "nodes" : {
     #       "getafix-24719" : {
-    #          "httpAddress" : "inet[/127.0.0.2:9200]",
-    #          "dataNode" : true,
-    #          "transportAddress" : "inet[getafix.traveljury.com/127.0.
+    #          "http_address" : "inet[/127.0.0.2:9200]",
+    #          "data_node" : true,
+    #          "transport_address" : "inet[getafix.traveljury.com/127.0.
     # >         0.2:9300]",
     #          "name" : "Sangre"
     #       },
     #       "getafix-17782" : {
-    #          "httpAddress" : "inet[/127.0.0.2:9201]",
-    #          "dataNode" : true,
-    #          "transportAddress" : "inet[getafix.traveljury.com/127.0.
+    #          "http_address" : "inet[/127.0.0.2:9201]",
+    #          "data_node" : true,
+    #          "transport_address" : "inet[getafix.traveljury.com/127.0.
     # >         0.2:9301]",
     #          "name" : "Williams, Eric"
     #       }
@@ -2048,6 +2030,22 @@ them to L<http://github.com/clintongormley/ElasticSearch.pm/issues>.
 I will be notified, and then you'll automatically be notified of progress on
 your bug as I make changes.
 
+=head1 TODO
+
+The API of the ElasticSearch cluster has just gone through a major tidy up,
+converting camelCase to underscore_separators, and improving a few
+inconsistencies.  It is likely that the API will be pretty stable for the
+foreseeable future.
+
+Version 0.6 will be released in early April 2010.
+
+Once it has been released, I will be keeping compatibility with
+released versions of ES rather the latest master from GitHub,
+although I'll try to provide developer only versions that track master.
+
+Hopefully I'll be adding an ElasticSearch::QueryBuilder (similar to
+L<SQL::Abstract>) which will make it easier to generate valid queries
+for ElasticSearch.
 
 =head1 SUPPORT
 

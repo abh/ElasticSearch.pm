@@ -1,4 +1,23 @@
 Revision history for ElasticSearch
+0.07    2010-04-05
+
+      - All tests pass as of version 8cfa04cea3bc2317ee613384ced4da20cf2737aa
+        on 2010-04-04:
+        http://github.com/elasticsearch/elasticsearch/commit/8cfa04cea3bc2317ee613384ced4da20cf2737aa
+
+      - Updated the API to take into account ElasticSearch's change from
+        using camelCase to underscore_separators
+      - create() now uses the /_create postfix instead of op_type=create,
+        although that flag is still available through index() and set()
+      - Changed more_like_this and more_like_this_field to mlt and mlt_field
+      - Changed fuzzy_like_this and fuzzy_like_this_field to flt and flt_field
+      - Changed term() to use gt/gte/lt/lte instead of from/to and
+        fromInclusive/toInclusive
+      - put_mapping now defaults to { ignore_conflicts => 0 }, so the
+        default now is to complain
+      - In mlt, boost_terms:boolean and boost_terms_factor:float have now
+        been merged to boost_terms:float
+
 0.06    2010-04-03
       - The test suite now requires Alien::ElasticSearch, and uses its own
         config file and work dir, so as not to interfere with existing
