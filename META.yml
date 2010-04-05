@@ -19,7 +19,7 @@ name: ElasticSearch
 provides:
   ElasticSearch:
     file: lib/ElasticSearch.pm
-    version: 0.07
+    version: 0.08
   ElasticSearch::Error:
     file: lib/ElasticSearch.pm
 requires:
@@ -31,4 +31,4 @@ requires:
   LWP::UserAgent: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.07
+version: 0.08

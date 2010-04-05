@@ -1,4 +1,7 @@
 Revision history for ElasticSearch
+0.08    2010-04-05
+      - Changed all_field to _all
+
 0.07    2010-04-05
 
       - All tests pass as of version 8cfa04cea3bc2317ee613384ced4da20cf2737aa

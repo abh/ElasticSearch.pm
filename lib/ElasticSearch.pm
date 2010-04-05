@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 use constant {
     ONE_REQ     => 1,
@@ -458,7 +458,7 @@ sub put_mapping {
             },
             data => {
                 properties => 'properties',
-                allField   => ['all_field']
+                _all       => ['_all']
             }
         },
         $params
@@ -1087,7 +1087,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.07 - this is an alpha release
+Version 0.08 - this is an alpha release
 
 =cut
 
@@ -1705,7 +1705,7 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/opt
     $result = $e->put_mapping(
         index               => multi,
         type                => single,
-        all_field           => { ... },
+        _all                => { ... },
         properties          => { ... },      # required
         timeout             => '5m' | '10s', # optional
         ignore_conflicts    => 1 | 0,        # optional

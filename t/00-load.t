@@ -158,8 +158,7 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } }
-        ),
+        actions => { add => { alias => 'alias_1', index => $Index } } ),
         'add alias_1';
     wait_for_es(1);
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
@@ -469,16 +468,13 @@ SKIP: {
 
     is $es->count( field => { text => 'foo' } )->{count}, 16, 'Count: field';
 
-    is $es->count(
-        flt => { fields => ['text'], like_text => 'bat' } )
+    is $es->count( flt => { fields => ['text'], like_text => 'bat' } )
         ->{count}, 24, 'fuzzy_like_this';
 
-    is $es->count(
-        flt_field => { text => { like_text => 'fooo' } } )
+    is $es->count( flt_field => { text => { like_text => 'fooo' } } )
         ->{count}, 16, 'fuzzy_like_this_field';
 
-    is $es->count(
-        mlt => { like_text => 'foo bar baz', min_term_freq => 1 } )
+    is $es->count( mlt => { like_text => 'foo bar baz', min_term_freq => 1 } )
         ->{count}, 10, 'Count: more_like_this';
     is $es->count( mlt_field =>
             { text => { like_text => 'foo bar baz', min_term_freq => 1 } } )
@@ -600,8 +596,7 @@ sub index_test_docs {
     $es->create_index( index => $_ ) for ( $Index, $Index_2 );
     $es->put_mapping(
         type => 'type_1',
-        all_field =>
-            { store => "yes", term_vector => "with_positions_offsets" },
+        _all => { store => "yes", term_vector => "with_positions_offsets" },
         properties => {
             text => { type => 'string',  store => 'yes' },
             num  => { type => 'integer', store => 'yes' },
@@ -610,8 +605,7 @@ sub index_test_docs {
 
     $es->put_mapping(
         type => 'type_2',
-        all_field =>
-            { store => "yes", term_vector => "with_positions_offsets" },
+        _all => { store => "yes", term_vector => "with_positions_offsets" },
         properties => {
             text => { type => 'string',  store => 'yes' },
             num  => { type => 'integer', store => 'yes' },
