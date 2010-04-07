@@ -158,7 +158,8 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } } ),
+        actions => { add => { alias => 'alias_1', index => $Index } }
+        ),
         'add alias_1';
     wait_for_es(1);
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
@@ -455,9 +456,9 @@ SKIP: {
         }
     )->{count}, 24, 'Count: dis_max';
 
-    is $es->count(
-        constant_score => { filter => { term => { text => 'foo' } } } )
-        ->{count}, 16, 'Count: constant_score';
+    is $es->count( constant_score =>
+            { filter => { terms => { text => [ 'foo', 'bar' ] } } } )
+        ->{count}, 24, 'Count: constant_score';
 
     is $es->count(
         filtered => {
@@ -598,8 +599,9 @@ sub index_test_docs {
         type => 'type_1',
         _all => { store => "yes", term_vector => "with_positions_offsets" },
         properties => {
-            text => { type => 'string',  store => 'yes' },
-            num  => { type => 'integer', store => 'yes' },
+            text => { type => 'string',  store  => 'yes' },
+            num  => { type => 'integer', store  => 'yes' },
+            date => { type => 'date',    format => 'yyyy-MM-dd HH:mm:ss' }
         },
     );
 
@@ -607,8 +609,9 @@ sub index_test_docs {
         type => 'type_2',
         _all => { store => "yes", term_vector => "with_positions_offsets" },
         properties => {
-            text => { type => 'string',  store => 'yes' },
-            num  => { type => 'integer', store => 'yes' },
+            text => { type => 'string',  store  => 'yes' },
+            num  => { type => 'integer', store  => 'yes' },
+            date => { type => 'date',    format => 'yyyy-MM-dd HH:mm:ss' }
         },
     );
 
@@ -633,7 +636,11 @@ sub index_test_docs {
                     index => $index,
                     type  => $type,
                     id    => $id++,
-                    data  => { text => $phrase, num => $id }
+                    data  => {
+                        text => $phrase,
+                        num  => $id,
+                        date => "2010-04-$id 00:00:00"
+                    }
                 );
 
             }
