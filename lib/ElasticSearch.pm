@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 use constant {
     ONE_REQ     => 1,
@@ -758,8 +758,8 @@ sub refresh_servers {
             return $result->{nodes};
         } or next;
 
-        @live_servers = map { $_->{httpAddress} }
-            grep { $_->{httpAddress} } values %$nodes;
+        @live_servers = grep {$_}
+            map { $_->{http_address} || $_->{httpAddress} } values %$nodes;
         last if @live_servers;
     }
 
@@ -1087,7 +1087,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.08 - this is an alpha release
+Version 0.09 - this is an alpha release
 
 =cut
 
