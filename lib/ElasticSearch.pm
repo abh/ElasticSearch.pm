@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 use constant {
     ONE_REQ     => 1,
@@ -46,7 +46,7 @@ our %QS_Formatter = (
     duration => sub {
         my ( $t, $k ) = @_;
         return unless defined $t;
-        return "$k=$t" if $t =~ /^[\d+][smh]$/i;
+        return "$k=$t" if $t =~ /^\d+[smh]$/i;
         die "$k '$t' is not in the form $QS_Format{duration}\n";
     },
     flatten => sub {
@@ -1087,7 +1087,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.09 - this is an alpha release
+Version 0.10 - this is an alpha release
 
 =cut
 
@@ -1382,8 +1382,8 @@ against multiple indices and multiple types, eg:
 For all of the options that can be included in the C<query> parameter, see
 L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search>,
 L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>,
-L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/77> and
-L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/69>
+L<http://github.com/elasticsearch/elasticsearch/issues/issue/77> and
+L<http://github.com/elasticsearch/elasticsearch/issues/issue/69>
 
 
 =head3 C<count()>
@@ -1604,7 +1604,7 @@ Adds or removes an alias for an index, eg:
 C<actions> can be a single HASH ref, or an ARRAY ref containing multiple HASH
 refs.
 
-See L<http://github.com/elasticsearch/elasticsearch/issues/closed#issue/88>
+See L<http://github.com/elasticsearch/elasticsearch/issues/issue/88>
 
 =head3 C<get_aliases()>
 
@@ -1827,6 +1827,10 @@ See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/no
 
 Shuts down one or more nodes (or the whole cluster if no nodes specified),
 optionally with a delay.
+
+C<node> can also have the values C<_local>, C<_master> or C<_all>.
+
+See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/nodes_shutdown/>
 
 =cut
 
