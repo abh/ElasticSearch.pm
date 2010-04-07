@@ -1,4 +1,12 @@
 Revision history for ElasticSearch
+0.10    2010-04-07
+        Fixed the duration regex
+        Improved docs for shutdown()
+
+0.09    2010-04-07
+        Changed refresh_servers to handle http_address and httpAddress
+        Added a terms filter test
+
 0.08    2010-04-05
       - Changed all_field to _all
 
