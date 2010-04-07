@@ -5,7 +5,7 @@ WriteMakefile
           'NAME' => 'ElasticSearch',
           'VERSION_FROM' => 'lib/ElasticSearch.pm',
           'PREREQ_PM' => {
-                           'Alien::ElasticSearch' => '0.08',
+                           'Alien::ElasticSearch' => '0.09',
                            'Data::Dumper' => 0,
                            'Encode' => 0,
                            'File::Temp' => '0.22',
