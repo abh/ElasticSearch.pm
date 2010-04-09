@@ -1,7 +1,7 @@
 #!perl
 
 #use Test::Most qw(defer_plan);
-use Test::Most tests => 135;
+use Test::Most tests => 137;
 use Module::Build;
 use File::Spec::Functions qw(catfile);
 use POSIX 'setsid';
@@ -23,7 +23,7 @@ local $SIG{INT} = sub { shutdown_servers(); };
 
 my $es = connect_to_es();
 SKIP: {
-    skip "ElasticSearch server not available for testing", 134 unless $es;
+    skip "ElasticSearch server not available for testing", 136 unless $es;
 
     ok $es, 'Connected to an ES cluster';
     like $es->current_server, qr{http://}, 'Current server set';
@@ -158,8 +158,7 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } }
-        ),
+        actions => { add => { alias => 'alias_1', index => $Index } } ),
         'add alias_1';
     wait_for_es(1);
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
@@ -392,6 +391,16 @@ SKIP: {
         query => { match_all => {} },
         sort => [ { num => { reverse => \1 } } ],
     )->{hits}{hits}[0]{_source}{num}, 29, " - reverse sort";
+
+    is $es->search(
+        query => { match_all => {} },
+        sort  => { 'num'     => 'asc' },
+    )->{hits}{hits}[0]{_source}{num}, 2, " - asc";
+
+    is $es->search(
+        query => { match_all => {} },
+        sort => [ { num => 'desc' } ],
+    )->{hits}{hits}[0]{_source}{num}, 29, " - desc";
 
     # FROM / TO
     ok $r= $es->search(
