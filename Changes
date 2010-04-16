@@ -1,4 +1,8 @@
 Revision history for ElasticSearch
+0.12    2010-04-16
+        Added scroll() and the indices_boost param to search()
+        Tested against ElasticSearch version 0.6.0
+
 0.11    2010-04-07
         Updated changelog
 
