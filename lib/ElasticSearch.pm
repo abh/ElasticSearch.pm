@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 use constant {
     ONE_REQ     => 1,
@@ -155,14 +155,16 @@ sub delete {
 }
 
 my %Search_Data = (
-    facets    => ['facets'],
-    from      => ['from'],
-    size      => ['size'],
-    explain   => ['explain'],
-    fields    => ['fields'],
-    'sort'    => ['sort'],
-    highlight => ['highlight']
+    facets        => ['facets'],
+    from          => ['from'],
+    size          => ['size'],
+    explain       => ['explain'],
+    fields        => ['fields'],
+    'sort'        => ['sort'],
+    highlight     => ['highlight'],
+    indices_boost => ['indices_boost'],
 );
+
 my %Search_Defn = (
     cmd     => CMD_index_type,
     postfix => '_search',
@@ -174,8 +176,7 @@ my %Search_Defn = (
                     query_then_fetch         query_and_fetch)
             ]
         ],
-        scroll    => [ 'duration', 'scroll' ],
-        scroll_id => [ 'string',   'scroll_id' ],
+        scroll => [ 'duration', 'scroll' ],
     },
     data => { %Search_Data, query => ['query'] }
 );
@@ -201,6 +202,19 @@ my %Query_Defn = (
 #===================================
 sub search { shift()->_do_action( 'search', \%Search_Defn, @_ ) }
 #===================================
+
+#===================================
+sub scroll {
+#===================================
+    shift()->_do_action(
+        'scroll',
+        {   cmd    => [],
+            prefix => '_search/scroll',
+            qs     => { scroll_id => [ 'string', 'scroll_id' ] }
+        },
+        @_
+    );
+}
 
 #===================================
 sub delete_by_query {
@@ -1087,7 +1101,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.11 - this is an alpha release
+Version 0.12, tested against ElasticSearch server version 0.6.0.
 
 =cut
 
@@ -1152,8 +1166,7 @@ a randomly chosen node in the list.
 To get the latest version from github, you can just install
 L<Alien::ElasticSearch>, or if you already have it installed, then try:
 
-    use Alien::ElasticSearch;;
-    Alien::ElasticSearch->update_from_git;
+    install_elasticsearch.pl --tag master
 
 Alternatively, you can download the latest release from
 L<http://www.elasticsearch.com/download/>, or to build from source on Unix:
@@ -1358,16 +1371,16 @@ See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/delete>
         index           => multi,
         type            => multi,
         query           => {query},
-        search_type     => $search_type         # optional
-        explain         => 1 | 0                # optional
-        facets          => { facets }           # optional
-        fields          => [$field_1,$field_n]  # optional
-        from            => $start_from          # optional
-        size            => $no_of_results       # optional
-        sort            => ['score',$field_1]   # optional
-        scroll          => '5m' | '30s'         # optional
-        scroll_id       => $scroll_id           # optional
-        highlight       => { highlight }        # optional
+        search_type     => $search_type             # optional
+        explain         => 1 | 0                    # optional
+        facets          => { facets }               # optional
+        fields          => [$field_1,$field_n]      # optional
+        from            => $start_from              # optional
+        size            => $no_of_results           # optional
+        sort            => ['score',$field_1]       # optional
+        scroll          => '5m' | '30s'             # optional
+        highlight       => { highlight }            # optional
+        indices_boost   => { index_1 => 1.5,... }   # optional
     );
 
 Searches for all documents matching the query. Documents can be matched
@@ -1379,12 +1392,24 @@ against multiple indices and multiple types, eg:
         query   => { term => {user => 'kimchy' }}
     );
 
-For all of the options that can be included in the C<query> parameter, see
-L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search>,
-L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>,
-L<http://github.com/elasticsearch/elasticsearch/issues/issue/77> and
-L<http://github.com/elasticsearch/elasticsearch/issues/issue/69>
+Note: C<indices_boost> doesn't seem to have any effect in version 0.6.0
+of ElasticSearch.
 
+For all of the options that can be included in the C<query> parameter, see
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search> and
+L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
+
+=head3 C<scroll()>
+
+    $result = $e->scroll(scroll_id => $scroll_id );
+
+If a search has been executed with a C<scroll> parameter, then the returned
+C<scroll_id> can be used like a cursor to scroll through the rest of the
+results.
+
+Note - this doesn't seem to work correctly in version 0.6.0 of ElasticSearch.
+
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search/#Scrolling>
 
 =head3 C<count()>
 
@@ -1517,7 +1542,6 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
         # optional search params
         scroll               =>  '5m' | '10s'
-        scroll_id            =>  "string"
         search_type          =>  "predefined_value"
         explain              =>  {explain}
         facets               =>  {facets}
@@ -1604,7 +1628,7 @@ Adds or removes an alias for an index, eg:
 C<actions> can be a single HASH ref, or an ARRAY ref containing multiple HASH
 refs.
 
-See L<http://github.com/elasticsearch/elasticsearch/issues/issue/88>
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/aliases/>
 
 =head3 C<get_aliases()>
 
@@ -2022,6 +2046,19 @@ JSON exception.
 
 Any documents indexed via this module will be not susceptible to this problem.
 
+=item L</"search()">
+
+The C<indices_boost> argument appears to have no effect in version 0.6.0 of
+ElasticSearch.
+
+See L<http://github.com/elasticsearch/elasticsearch/issues/issue/137>
+
+=item L</"scroll()">
+
+C<scroll()> is broken in version 0.6.0 of ElasticSearch.
+
+See L<http://github.com/elasticsearch/elasticsearch/issues/issue/136>
+
 =back
 
 =head1 BUGS
@@ -2035,17 +2072,6 @@ I will be notified, and then you'll automatically be notified of progress on
 your bug as I make changes.
 
 =head1 TODO
-
-The API of the ElasticSearch cluster has just gone through a major tidy up,
-converting camelCase to underscore_separators, and improving a few
-inconsistencies.  It is likely that the API will be pretty stable for the
-foreseeable future.
-
-Version 0.6 will be released in early April 2010.
-
-Once it has been released, I will be keeping compatibility with
-released versions of ES rather the latest master from GitHub,
-although I'll try to provide developer only versions that track master.
 
 Hopefully I'll be adding an ElasticSearch::QueryBuilder (similar to
 L<SQL::Abstract>) which will make it easier to generate valid queries
