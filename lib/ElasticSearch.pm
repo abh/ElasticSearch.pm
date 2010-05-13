@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 use constant {
     ONE_REQ     => 1,
@@ -1147,7 +1147,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.12, tested against ElasticSearch server version 0.6.0.
+Version 0.13, tested against ElasticSearch server version 0.7.0.
 
 =cut
 
