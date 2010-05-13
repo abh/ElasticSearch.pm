@@ -1,4 +1,10 @@
 Revision history for ElasticSearch
+0.13    2010-05-13
+        Added nodes_stats(), shutdown(), restart() and camel_case()
+        Removed Alien::ElasticSearch, as it is now easier to install
+        ElasticSearch directly.
+        Tested against ElasticSearch version 0.7.0
+
 0.12    2010-04-16
         Added scroll() and the indices_boost param to search()
         Tested against ElasticSearch version 0.6.0

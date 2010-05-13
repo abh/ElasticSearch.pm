@@ -2,14 +2,13 @@
 
 #use Test::Most qw(defer_plan);
 our $test_num;
-BEGIN { $test_num = 150 }
+BEGIN { $test_num = 156 }
 use Test::Most tests => $test_num;
 use Module::Build;
 use File::Spec::Functions qw(catfile);
 use POSIX 'setsid';
 use IO::Socket();
 use File::Temp();
-use Alien::ElasticSearch();
 
 my $instances = 3;
 my $Index     = 'es_test_1';
@@ -66,6 +65,15 @@ SKIP: {
         is_deeply [ keys %{ $r->{nodes} } ],
             \@nodes, ' - retrieved the same nodes';
     }
+
+    isa_ok $r= $es->nodes_stats->{nodes}, 'HASH', ' - nodes_stats';
+    my ($node_id) = ( keys %$r );
+    ok $r->{$node_id}{jvm}, ' - stats detail';
+
+    ok $es->camel_case(1), 'Camel case on';
+    ok $es->nodes->{nodes}{$node_id}{httpAddress}, ' - got camel case';
+    ok $es->camel_case(0) == 0, ' - camel case off';
+    ok $es->nodes->{nodes}{$node_id}{http_address}, ' - got underscores';
 
     # drop index in case rerunning test
     drop_indices();
@@ -161,7 +169,8 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } } ),
+        actions => { add => { alias => 'alias_1', index => $Index } }
+        ),
         'add alias_1';
     wait_for_es(1);
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
@@ -451,27 +460,25 @@ SKIP: {
 
     # INDICES_BOOST
 
-SKIP: {
-        skip "indices_boost not having any affect - broken on server", 6;
-        ok $r= $es->search(
-            query => { field => { text => 'foo' } },
-            sort  => ['score'],
-            size  => 2,
-            indices_boost => { es_test_1 => 5000, es_test_2 => 0.1 }
-            ),
-            'boost index 1';
-        is $r->{hits}{hits}[0]{_id}, 2, ' - first id 2';
-        is $r->{hits}{hits}[1]{_id}, 4, ' - second id 4';
-        ok $r= $es->search(
-            query => { field => { text => 'foo' } },
-            sort  => ['score'],
-            size  => 2,
-            indices_boost => { es_test_1 => 0.1, es_test_2 => 5000 }
-            ),
-            'boost index 2';
-        is $r->{hits}{hits}[0]{_id}, 4, ' - first id 4';
-        is $r->{hits}{hits}[1]{_id}, 2, ' - second id 2';
-    }
+    ok $r= $es->search(
+        query => { field => { text => 'foo' } },
+        sort  => ['score'],
+        size  => 2,
+        indices_boost => { es_test_1 => 5000, es_test_2 => 0.1 }
+        ),
+        'boost index 1';
+
+    is $r->{hits}{hits}[0]{_id}, 2, ' - first id 2';
+    is $r->{hits}{hits}[1]{_id}, 5, ' - second id 5';
+    ok $r= $es->search(
+        query => { field => { text => 'foo' } },
+        sort  => ['score'],
+        size  => 2,
+        indices_boost => { es_test_1 => 0.1, es_test_2 => 5000 }
+        ),
+        'boost index 2';
+    is $r->{hits}{hits}[0]{_id}, 4, ' - first id 4';
+    is $r->{hits}{hits}[1]{_id}, 3, ' - second id 3';
 
     ## COUNT ###
 
@@ -724,16 +731,16 @@ sub wait_for_es {
 my @PIDs;
 
 sub connect_to_es {
-    my $install_dir = $ENV{ES_SERVER} || Alien::ElasticSearch->install_dir;
-    if ( !$install_dir ) {
+    my $install_dir = $ENV{ES_HOME}
+        or do {
         diag "";
         diag "**** The ElasticSearch server is not installed ****";
-        diag "You can install it by typing this at the command line:";
         diag "";
-        diag "  install_elasticsearch.pl";
+        diag "If you want to run the tests, please install ElasticSearch";
+        diag "and set \$ES_HOME to the path where it is installed.";
         diag "";
         return;
-    }
+        };
 
     my @servers = map {"127.0.0.1:920$_"} 0 .. $instances - 1;
     foreach (@servers) {

@@ -3,7 +3,6 @@ abstract: 'An API for communicating with ElasticSearch'
 author:
   - 'Clinton Gormley <drtech@cpan.org>'
 build_requires:
-  Alien::ElasticSearch: 0.10
   File::Temp: 0.22
   IO::Socket: 0
   POSIX: 0

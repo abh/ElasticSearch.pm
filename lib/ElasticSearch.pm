@@ -91,7 +91,8 @@ our %QS_Formatter = (
 sub new {
 #===================================
     my ( $proto, $params ) = &_params;
-    my $self = bless { _JSON => JSON::XS->new() }, ref $proto || $proto;
+    my $self = bless { _JSON => JSON::XS->new(), _base_qs => [], _camel_case=>0 },
+        ref $proto || $proto;
     my $servers = delete $params->{servers};
     for ( keys %$params ) {
         $self->$_( $params->{$_} );
@@ -539,6 +540,19 @@ sub nodes {
 }
 
 #===================================
+sub nodes_stats {
+#===================================
+    shift()->_do_action(
+        'nodes',
+        {   prefix  => '_cluster/nodes',
+            postfix => 'stats',
+            cmd     => CMD_nodes,
+        },
+        @_
+    );
+}
+
+#===================================
 sub shutdown {
 #===================================
     shift()->_do_action(
@@ -547,6 +561,21 @@ sub shutdown {
             prefix  => '_cluster/nodes',
             cmd     => CMD_nodes,
             postfix => '_shutdown',
+            qs      => { delay => [ 'duration', 'delay' ] }
+        },
+        @_
+    );
+}
+
+#===================================
+sub restart {
+#===================================
+    shift()->_do_action(
+        'shutdown',
+        {   method  => 'POST',
+            prefix  => '_cluster/nodes',
+            cmd     => CMD_nodes,
+            postfix => '_restart',
             qs      => { delay => [ 'duration', 'delay' ] }
         },
         @_
@@ -571,6 +600,23 @@ sub cluster_health {
         },
         @_
     );
+}
+
+#===================================
+sub camel_case {
+#===================================
+    my $self = shift;
+    if (@_) {
+        if ( shift() ) {
+            $self->{_camel_case} = 1;
+            $self->{_base_qs}    = ['case=camelCase'];
+        }
+        else {
+            $self->{_camel_case} = 0;
+            $self->{_base_qs}    = [];
+        }
+    }
+    return $self->{_camel_case};
 }
 
 #===================================
@@ -661,7 +707,7 @@ sub _build_qs {
     my $self   = shift;
     my $params = shift;
     my $defn   = shift or return;
-    my @qs;
+    my @qs     = ( @{ $self->{_base_qs} } );
     foreach my $key ( keys %$defn ) {
         my ( $format_name, @args ) = @{ $defn->{$key} || [] };
         $format_name ||= '';
@@ -1163,17 +1209,17 @@ a randomly chosen node in the list.
 
 =head1 GETTING ElasticSearch
 
-To get the latest version from github, you can just install
-L<Alien::ElasticSearch>, or if you already have it installed, then try:
+You can download the latest released version of ElasticSearch from
+L<http://github.com/elasticsearch/elasticsearch/downloads>.
 
-    install_elasticsearch.pl --tag master
-
-Alternatively, you can download the latest release from
-L<http://www.elasticsearch.com/download/>, or to build from source on Unix:
+To build the latest development version from source, you can do
+the following:
 
     cd ~
-    git clone git://github.com/elasticsearch/elasticsearch.git
-    cd elasticsearch
+    rm -Rf elasticsearch*
+    wget http://github.com/elasticsearch/elasticsearch/tarball/master
+    tar -xzf elasticsearch*.gz
+    cd elasticsearch*
     ./gradlew
 
     cd /path/where/you/want/elasticsearch
@@ -1391,9 +1437,6 @@ against multiple indices and multiple types, eg:
         type    => ['user','tweet'],
         query   => { term => {user => 'kimchy' }}
     );
-
-Note: C<indices_boost> doesn't seem to have any effect in version 0.6.0
-of ElasticSearch.
 
 For all of the options that can be included in the C<query> parameter, see
 L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search> and
@@ -1841,6 +1884,16 @@ C<settings> is C<true>, then it includes the node settings information.
 
 See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/nodes_info>
 
+=head3 C<nodes_stats()>
+
+    $result = $e->nodes_stats(
+        nodes       => multi,
+    );
+
+Returns various statistics about one or more nodes in the cluster.
+
+See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/nodes_stats/>
+
 =head3 C<shutdown()>
 
     $result = $e->shutdown(
@@ -1855,6 +1908,21 @@ optionally with a delay.
 C<node> can also have the values C<_local>, C<_master> or C<_all>.
 
 See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/nodes_shutdown/>
+
+=head3 C<restart()>
+
+    $result = $e->restart(
+        nodes       => multi,
+        delay       => '5s' | '10m'        # optional
+    );
+
+
+Restarts one or more nodes (or the whole cluster if no nodes specified),
+optionally with a delay.
+
+C<node> can also have the values C<_local>, C<_master> or C<_all>.
+
+See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/nodes_restart>
 
 =cut
 
@@ -1935,6 +2003,16 @@ If you need to change the JSON settings you can do (eg):
 It is probably better not to fiddle with this!  ElasticSearch expects all
 data to be provided as Perl strings (not as UTF8 encoded byte strings) and
 returns all data from ElasticSearch as Perl strings.
+
+=head3 C<camel_case()>
+
+    $bool = $e->camel_case($bool)
+
+Gets/sets the camel_case flag. If true, then all JSON keys returned by
+ElasticSearch are in camelCase, instead of with_underscores.  This flag
+does not apply to the source document being indexed or fetched.
+
+Defaults to false.
 
 =cut
 
@@ -2045,13 +2123,6 @@ document (eg unquoted keys) then C<< $e->get(....) >> will fail with a
 JSON exception.
 
 Any documents indexed via this module will be not susceptible to this problem.
-
-=item L</"search()">
-
-The C<indices_boost> argument appears to have no effect in version 0.6.0 of
-ElasticSearch.
-
-See L<http://github.com/elasticsearch/elasticsearch/issues/issue/137>
 
 =item L</"scroll()">
 

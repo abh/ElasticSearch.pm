@@ -9,7 +9,6 @@ my $builder = Module::Build->new(
     dist_version_from => 'lib/ElasticSearch.pm',
     build_requires    => {
         'Test::Most'           => 0,
-        'Alien::ElasticSearch' => '0.10',
         'POSIX'                => 0,
         'IO::Socket'           => 0,
         'File::Temp'           => '0.22',
