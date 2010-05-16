@@ -91,13 +91,19 @@ our %QS_Formatter = (
 sub new {
 #===================================
     my ( $proto, $params ) = &_params;
-    my $self = bless { _JSON => JSON::XS->new(), _base_qs => [], _camel_case=>0 },
-        ref $proto || $proto;
+    my $self = {
+        _JSON       => JSON::XS->new(),
+        _base_qs    => [],
+        _camel_case => 0
+    };
+    bless $self, ref $proto || $proto;
     my $servers = delete $params->{servers};
     for ( keys %$params ) {
         $self->$_( $params->{$_} );
     }
-    $self->{_servers}{$$} = ref $servers eq 'ARRAY' ? $servers : [$servers];
+    $servers = [$servers] unless ref $servers eq 'ARRAY';
+    $self->{_servers}{$$} = $servers;
+    $self->{_default_servers} = [@$servers];
     return $self;
 }
 
@@ -801,10 +807,7 @@ sub servers { shift->{_servers}{$$} }
 sub refresh_servers {
 #===================================
     my $self = shift;
-    my @servers
-        = @_ == 0 ? @{ ( values %{ $self->{_servers} } )[0] || [] }
-        : ref $_[0] eq 'ARRAY' ? ( @{ $_[0] } )
-        :                        (@_);
+    my @servers = ( @{ $self->servers }, @{ $self->{_default_servers} } );
 
     my @live_servers;
     foreach my $server (@servers) {
