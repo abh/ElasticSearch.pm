@@ -1,4 +1,8 @@
 Revision history for ElasticSearch
+0.15    2010-05-16
+        Fixed a bug in refresh_servers() introduced in 0.14, when forking
+        processes.
+
 0.14    2010-05-16
         The object now stores the original servers parameter, so that
         if the nodes disassociate and the live server list is limited,
