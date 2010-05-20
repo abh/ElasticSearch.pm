@@ -906,7 +906,9 @@ sub request {
         if ( ref $error ) {
             my $code = $error->{-vars}{status_code} || 0;
             my $msg  = $error->{-vars}{status_msg}  || '';
-            if ( $code == 500 && $msg =~ /Can't connect/ ) {
+            if (   $code == 500
+                && $msg =~ /Can't connect|Server closed connection/ )
+            {
                 warn "Error connecting to '$current_server' : $msg";
                 $self->refresh_servers;
                 next;
@@ -964,7 +966,10 @@ sub _request {
         $error_msg  = $json_error;
     }
     else {
-        $error_type = 'Request';
+        $error_type
+            = $error_params->{status_msg} eq 'read timeout'
+            ? 'Timeout'
+            : 'Request';
         $error_msg
             = $result && $result->{error}
             ? $result->{error}
@@ -1115,6 +1120,7 @@ package ElasticSearch::Error;
 @ElasticSearch::Error::Param::ISA     = __PACKAGE__;
 @ElasticSearch::Error::NoServers::ISA = __PACKAGE__;
 @ElasticSearch::Error::Request::ISA   = __PACKAGE__;
+@ElasticSearch::Error::Timeout::ISA   = __PACKAGE__;
 @ElasticSearch::Error::JSON::ISA      = __PACKAGE__;
 
 use strict;
