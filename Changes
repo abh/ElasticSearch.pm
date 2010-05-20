@@ -1,4 +1,12 @@
 Revision history for ElasticSearch
+0.16    2010-05-20
+        Added an ElasticSearch::Error::Timeout error class, to catch
+        occassions when the request times out, instead of failing
+        for a different reason.
+
+        Also, catch 'Server closed connection' errors, and automatically
+        refresh_servers and retry the request.
+
 0.15    2010-05-16
         Fixed a bug in refresh_servers() introduced in 0.14, when forking
         processes.
