@@ -170,6 +170,7 @@ my %Search_Data = (
     'sort'        => ['sort'],
     highlight     => ['highlight'],
     indices_boost => ['indices_boost'],
+    script_fields => ['script_fields'],
 );
 
 my %Search_Defn = (
