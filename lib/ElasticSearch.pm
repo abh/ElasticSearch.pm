@@ -416,8 +416,8 @@ sub optimize_index {
             postfix => '_optimize',
             qs      => {
                 only_deletes => [ 'boolean', 'only_expunge_deletes=true' ],
-                refresh      => [ 'boolean', 'refresh=true' ],
-                flush        => [ 'boolean', 'flush=true' ]
+                refresh => [ 'boolean', 'refresh=true', 'refresh=false' ],
+                flush => [ 'boolean', 'flush=true', 'flush=false' ]
             },
         },
         @_
