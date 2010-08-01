@@ -517,10 +517,11 @@ sub cluster_state {
 }
 
 #===================================
-sub cluster_state {
+sub current_server_version {
 #===================================
     shift()
-        ->_do_action( 'cluster_state', { prefix => '_cluster/state' }, @_ );
+        ->_do_action( 'current_server_version',
+        { cmd => CMD_NONE, prefix => '' } )->{version};
 }
 
 #===================================
