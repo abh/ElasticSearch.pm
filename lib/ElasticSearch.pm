@@ -385,7 +385,10 @@ sub flush_index {
         {   method  => 'POST',
             cmd     => CMD_index,
             postfix => '_flush',
-            qs      => { refresh => [ 'boolean', 'refresh=true' ] },
+            qs      => {
+                refresh => [ 'boolean', 'refresh=true' ],
+                full    => [ 'boolean', 'full=true' ]
+            },
         },
         @_
     );
