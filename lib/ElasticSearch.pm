@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 use constant {
     ONE_REQ     => 1,
