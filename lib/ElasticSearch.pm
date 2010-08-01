@@ -18,6 +18,7 @@ use constant {
 };
 
 use constant {
+    CMD_NONE          => [],
     CMD_INDEX_TYPE_ID => [ index => ONE_REQ, type => ONE_REQ, id => ONE_REQ ],
     CMD_INDEX_TYPE_id => [ index => ONE_REQ, type => ONE_REQ, id => ONE_OPT ],
     CMD_index      => [ index => MULTI_BLANK ],
@@ -1149,7 +1150,12 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.13, tested against ElasticSearch server version 0.7.0.
+Version 0.17, tested against ElasticSearch server version 0.9.0.
+
+NOTE: Various features present in older versions of the ElasticSearch server
+which have been removed from ElasticSearch 0.9.0 have also been removed from
+this module.  If you are still using ElasticSearch 0.8.0 or older (and I highly
+recommned upgrading!), then you should use ElasticSearch.pm version 0.16.
 
 =cut
 
@@ -1177,9 +1183,9 @@ a randomly chosen node in the list.
 
     use ElasticSearch;
     my $e = ElasticSearch->new(
-        servers     => 'search.foo.com',
-        debug       => 1,
+        servers     => 'search.foo.com:9200',
         trace_calls => 'log_file',
+        debug       => 1,
     );
 
     $e->index(
@@ -1204,6 +1210,14 @@ a randomly chosen node in the list.
         type  => 'tweet',
         query => {
             term    => { user => 'kimchy' },
+        }
+    );
+
+    $results = $e->search(
+        index => 'twitter',
+        type  => 'tweet',
+        query => {
+            query_string => { query => 'kimchy' },
         }
     );
 
@@ -1268,7 +1282,7 @@ Methods that query the ElasticSearch cluster return the raw data structure
 that the cluster returns.  This may change in the future, but as these
 data structures are still in flux, I thought it safer not to try to interpret.
 
-Anything that is know to be an error throws an exception, eg trying to delete
+Anything that is known to be an error throws an exception, eg trying to delete
 a non-existent index.
 
 =cut
@@ -1283,6 +1297,7 @@ a non-existent index.
             servers     =>  '127.0.0.1:9200'            # single server
                             | ['es1.foo.com:9200',
                                'es2.foo.com:9200'],     # multiple servers
+            trace_calls => 1 | '/path/to/log/file',
             debug       => 1 | 0,
             ua_options  => { LWP::UserAgent options},
 
@@ -1293,7 +1308,7 @@ ARRAY ref with a list of servers.  These servers are used to retrieve a list
 of all servers in the cluster, after which one is chosen at random to be
 the L</"current_server()">.
 
-See also: L</"debug()">, L</"ua_options()">,
+See also: L</"debug()">, L</"ua_options()">, L</"trace_calls()">,
           L</"refresh_servers()">, L</"servers()">, L</"current_server()">
 
 =cut
@@ -1424,8 +1439,9 @@ See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/delete>
         facets          => { facets }               # optional
         fields          => [$field_1,$field_n]      # optional
         from            => $start_from              # optional
+        script_fields   => { script_fields }        # optional
         size            => $no_of_results           # optional
-        sort            => ['score',$field_1]       # optional
+        sort            => ['_score',$field_1]      # optional
         scroll          => '5m' | '30s'             # optional
         highlight       => { highlight }            # optional
         indices_boost   => { index_1 => 1.5,... }   # optional
@@ -1435,7 +1451,7 @@ Searches for all documents matching the query. Documents can be matched
 against multiple indices and multiple types, eg:
 
     $result = $e->search(
-        index   => undef,               # all
+        index   => undef,                           # all
         type    => ['user','tweet'],
         query   => { term => {user => 'kimchy' }}
     );
@@ -1452,7 +1468,7 @@ If a search has been executed with a C<scroll> parameter, then the returned
 C<scroll_id> can be used like a cursor to scroll through the rest of the
 results.
 
-Note - this doesn't seem to work correctly in version 0.6.0 of ElasticSearch.
+Note - this doesn't seem to work correctly in version 0.9.0 of ElasticSearch.
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search/#Scrolling>
 
@@ -1463,18 +1479,25 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search/#Scrolling
         type            => multi,
 
         bool
-      | constantScore
-      | disMax
+      | constant_score
+      | custom_score
+      | dis_max
       | field
       | filtered
       | flt
       | flt_field
+      | fuzzy
       | match_all
       | mlt
       | mlt_field
       | query_string
       | prefix
       | range
+      | span_term
+      | span_first
+      | span_near
+      | span_not
+      | span_or
       | term
       | wildcard
     );
@@ -1485,7 +1508,7 @@ against multiple indices and multiple types, eg
     $result = $e->count(
         index   => undef,               # all
         type    => ['user','tweet'],
-        query   => { term => {user => 'kimchy' }}
+        term => {user => 'kimchy' },
     );
 
 See also L</"search()">,
@@ -1500,18 +1523,25 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
         type            => multi,
 
         bool
-      | constantScore
-      | disMax
+      | constant_score
+      | custom_score
+      | dis_max
       | field
       | filtered
       | flt
       | flt_field
+      | fuzzy
       | match_all
       | mlt
       | mlt_field
       | query_string
       | prefix
       | range
+      | span_term
+      | span_first
+      | span_near
+      | span_not
+      | span_or
       | term
       | wildcard
     );
@@ -1529,40 +1559,6 @@ See also L</"search()">,
 L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/delete_by_query>
 and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
-
-=head3 C<terms()>
-
-    $terms = $e->terms(
-        index           => multi,
-        fields          => 'field' | [field1..],   # required
-        min_freq        =>  integer,               # optional
-        max_freq        =>  integer,               # optional
-        size            =>  integer,               # optional
-        sort            =>  term (default) | freq  # optional
-
-        ## A range of terms eg alpha - omega
-        from            => 'first term',           # optional
-        to              => 'last term',            # optional
-        from_inclusive  => 1 | 0                   # optional
-        to_inclusive    => 1 | 0                   # optional
-
-        prefix          => 'prefix',               # terms starting with
-        regexp          => 'regexp',               # terms matching ^regexp$
-    );
-
-Get terms (from one or more indices) and the number of times those terms
-appear in a document.  Useful for generating tag clouds or for auto-suggestion.
-
-eg:
-
-    $terms = $e->terms(
-        index       => 'twitter',
-        fields      => ['tweet','reply'],
-        prefix      => 'arnol'
-    )
-
-See also L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/terms>
-and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
 
 =head3 C<mlt()>
 
@@ -1599,7 +1595,7 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/>
     )
 
 More-like-this (mlt) finds related/similar documents. It is possible to run
-a search query with a C<moreLikeThis> clause (where you pass in the text
+a search query with a C<more_like_this> clause (where you pass in the text
 you're trying to match), or to use this method, which uses the text of
 the document referred to by C<index/type/id>.
 
@@ -1607,7 +1603,7 @@ This gets transformed into a search query, so all of the search parameters
 are also available.
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/more_like_this/>
-and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/moreLikeThis_query/>
+and L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/query_dsl/more_like_this_query/>
 
 =cut
 
@@ -1697,10 +1693,12 @@ to that argument.
 =head3 C<flush_index()>
 
     $result = $e->flush_index(
-        index   => multi
+        index   => multi,
+        full    => 1 | 0,       # optional
+        refresh => 1 | 0,       # optional
     );
 
-Flushes one or more indices. The flush process of an index basically frees
+Flushes one or more indices, which frees
 memory from the index by flushing data to the index storage and clearing the
 internal transaction log. By default, ElasticSearch uses memory heuristics
 in order to automatically trigger flush operations as required in order to
@@ -1796,7 +1794,7 @@ to specify an official C<mapping> instead, eg:
         type    => 'tweet',
         properties  =>  {
             user        =>  {type  =>  "string", index      =>  "not_analyzed"},
-            message     =>  {type  =>  "string", nullValue  =>  "na"},
+            message     =>  {type  =>  "string", null_value =>  "na"},
             post_date   =>  {type  =>  "date"},
             priority    =>  {type  =>  "integer"},
             rank        =>  {type  =>  "float"}
@@ -1806,9 +1804,9 @@ to specify an official C<mapping> instead, eg:
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/put_mapping>
 and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
 
-=head3 C<get_mapping()>
+=head3 C<mapping()>
 
-    $mapping = $e->get_mapping(
+    $mapping = $e->mapping(
         index       => single,
         type        => multi
     );
@@ -1816,18 +1814,21 @@ and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
 Returns the mappings for all types in an index, or the mapping for the specified
 type(s), eg:
 
-    $mapping = $e->get_mapping(
+    $mapping = $e->mapping(
         index       => 'twitter',
         type        => 'tweet'
     );
 
-    $mappings = $e->get_mapping(
+    $mappings = $e->mapping(
         index       => 'twitter',
         type        => ['tweet','user']
     );
-    # { tweet => {mapping}, user => {mapping}}
+    # { twitter => { tweet => {mapping}, user => {mapping}} }
 
-The index argument must be an index name, and not an alias name.
+Note: the index name which as used in the results is the actual index name. If
+you pass an alias name as the C<index> name, then this key will be the
+index (or indices) that the alias points to.
+
 
 =cut
 
@@ -1835,7 +1836,12 @@ The index argument must be an index name, and not an alias name.
 
 =head3 C<cluster_state()>
 
-    $result = $e->cluster_state();
+    $result = $e->cluster_state(
+         filter_nodes           => 1 | 0,                        # optional
+         filter_metadata        => 1 | 0,                        # optional
+         filter_routing_table   => 1 | 0,                        # optional
+         filter_indices         => [ 'index_1', ... 'index_n' ], # optional
+    );
 
 Returns cluster state information.
 
@@ -1848,6 +1854,7 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/sta
         level                         => 'cluster' | 'indices' | 'shards',
         wait_for_status               => 'red' | 'yellow' | 'green',
         | wait_for_relocating_shards  => $number_of_shards,
+        | wait_for_nodes              => eg '>=2',
         timeout                       => $seconds
     );
 
@@ -1866,13 +1873,15 @@ returned status means:
 
 It can block to wait for a particular status (or better), or can block to
 wait until the specified number of shards have been relocated (where 0 means
-all).
+all) or the specified number of nodes have been allocated.
 
 If waiting, then a timeout can be specified.
 
 For example:
 
-    $result = $e->cluster_health( wait_for_status => 'green', timeout => 10)
+    $result = $e->cluster_health( wait_for_status => 'green', timeout => '10s')
+
+See: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/cluster/health/>
 
 =head3 C<nodes()>
 
@@ -1951,13 +1960,13 @@ the last known good list) instead.
 
 Throws an exception if no servers can be found.
 
-C<refresh_server> is called from :
+C<refresh_server> is called:
 
 =over
 
-=item L</"new()">
+=item the first time that L</"request()"> or L</"current_server()"> is called
 
-=item if any L</"request()"> fails
+=item if any L</"request()"> fails to connect to the current server
 
 =item if the process forks and the PID changes
 
@@ -1969,6 +1978,13 @@ C<refresh_server> is called from :
 
 Returns the current server for the current PID, or if none is set, then it
 tries to get a new current server by calling L</"refresh_servers()">.
+
+=head3 C<current_server_version()>
+
+    $version = $e->current_server_version()
+
+Returns a HASH containing the version C<number> string, the build C<date> and
+whether or not the current server is a C<snapshot_build>.
 
 =head3 C<ua()>
 
@@ -2065,25 +2081,24 @@ be rerun with curl.
 
 The cluster response will also be logged, and commented out.
 
-Example: C<< $e->nodes() >> is logged as:
+Example: C<< $e->cluster_state(level=>'indices') >> is logged as:
 
-    curl -XGET http://127.0.0.1:9200/_cluster/nodes
+    curl -XGET 'http://127.0.0.1:9200/_cluster/health?level=indices'
     # {
-    #    "clusterName" : "elasticsearch",
-    #    "nodes" : {
-    #       "getafix-24719" : {
-    #          "http_address" : "inet[/127.0.0.2:9200]",
-    #          "data_node" : true,
-    #          "transport_address" : "inet[getafix.traveljury.com/127.0.
-    # >         0.2:9300]",
-    #          "name" : "Sangre"
-    #       },
-    #       "getafix-17782" : {
-    #          "http_address" : "inet[/127.0.0.2:9201]",
-    #          "data_node" : true,
-    #          "transport_address" : "inet[getafix.traveljury.com/127.0.
-    # >         0.2:9301]",
-    #          "name" : "Williams, Eric"
+    #    "active_primary_shards" : 5,
+    #    "timed_out" : false,
+    #    "relocating_shards" : 0,
+    #    "active_shards" : 5,
+    #    "status" : "yellow",
+    #    "number_of_nodes" : 1,
+    #    "indices" : {
+    #       "foo" : {
+    #          "active_primary_shards" : 5,
+    #          "relocating_shards" : 0,
+    #          "number_of_replicas" : 1,
+    #          "active_shards" : 5,
+    #          "status" : "yellow",
+    #          "number_of_shards" : 5
     #       }
     #    }
     # }
@@ -2128,7 +2143,7 @@ Any documents indexed via this module will be not susceptible to this problem.
 
 =item L</"scroll()">
 
-C<scroll()> is broken in version 0.6.0 of ElasticSearch.
+C<scroll()> is broken in version 0.9.0 and earlier versions of ElasticSearch.
 
 See L<http://github.com/elasticsearch/elasticsearch/issues/issue/136>
 
@@ -2136,7 +2151,7 @@ See L<http://github.com/elasticsearch/elasticsearch/issues/issue/136>
 
 =head1 BUGS
 
-This is an alpha module, so there will be bugs, and the API is likely to
+This is a beta module, so there will be bugs, and the API is likely to
 change in the future, as the API of ElasticSearch itself changes.
 
 If you have any suggestions for improvements, or find any bugs, please report
@@ -2146,9 +2161,14 @@ your bug as I make changes.
 
 =head1 TODO
 
-Hopefully I'll be adding an ElasticSearch::QueryBuilder (similar to
+Hopefully I'll be adding an ElasticSearch::Abstract (similar to
 L<SQL::Abstract>) which will make it easier to generate valid queries
 for ElasticSearch.
+
+Also planned are support for different transport modules, using eg
+L<HTTP::Lite> (much faster than C<LWP::Request>) or L<Memcached> (faster still,
+but with more limited server responses). Also, a non-blocking L<AnyEvent> module
+would be good.
 
 =head1 SUPPORT
 
