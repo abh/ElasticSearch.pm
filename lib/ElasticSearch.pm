@@ -476,19 +476,44 @@ sub gateway_snapshot {
 sub put_mapping {
 #===================================
     my ( $self, $params ) = &_params;
+    my $action = 'put_mapping';
+    my $defn   = {
+        method  => 'PUT',
+        cmd     => CMD_index_TYPE,
+        postfix => '_mapping',
+        qs => { ignore_conflicts => [ 'boolean', 'ignore_conflicts=true' ] },
+        data => {
+            properties => 'properties',
+            _all       => ['_all'],
+        }
+    };
+
+    my $type_name = $params->{type} || '';
+    my $type_val = {};
+    $type_val->{properties} = delete $params->{properties}
+        or $self->throw(
+        'Param',
+        "Missing required param 'properties'\n"
+            . $self->_usage( $action, $defn ),
+        { params => $params }
+        );
+
+    $type_val->{_all} = delete $params->{_all}
+        if exists $params->{_all};
+    $params->{$type_name} = $type_val;
+    $defn->{data} = { $type_name => $type_name };
+    $self->_do_action( $action, $defn, $params );
+}
+
+#===================================
+sub mapping {
+#===================================
+    my ( $self, $params ) = &_params;
     $self->_do_action(
-        'put_mapping',
-        {   method  => 'PUT',
-            cmd     => CMD_index_TYPE,
+        'mapping',
+        {   method  => 'GET',
+            cmd     => CMD_index_type,
             postfix => '_mapping',
-            qs      => {
-                timeout          => [ 'duration', 'timeout' ],
-                ignore_conflicts => [ 'boolean',  'ignore_conflicts=true' ]
-            },
-            data => {
-                properties => 'properties',
-                _all       => ['_all']
-            }
         },
         $params
     );
