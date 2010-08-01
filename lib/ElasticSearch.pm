@@ -593,7 +593,8 @@ sub cluster_health {
                     [ 'enum', 'wait_for_status', [qw(green yellow red)] ],
                 wait_for_relocating_shards =>
                     [ 'int', 'wait_for_relocating_shards' ],
-                timeout => [ 'duration', 'timeout' ]
+                wait_for_nodes => [ 'string',   'wait_for_nodes' ],
+                timeout        => [ 'duration', 'timeout' ]
             }
         },
         @_
