@@ -498,42 +498,22 @@ sub mapping {
 }
 
 #===================================
-sub get_mapping {
+sub cluster_state {
 #===================================
-    my ( $self,  $params ) = &_params;
-    my ( $index, $type )   = @{$params}{qw(index type)};
+    shift()->_do_action(
+        'cluster_state',
+        {   prefix => '_cluster/state',
+            qs     => {
+                filter_nodes    => [ 'boolean', 'filter_nodes=true' ],
+                filter_metadata => [ 'boolean', 'filter_metadata=true' ],
+                filter_routing_table =>
+                    [ 'boolean', 'filter_routing_table=true' ],
+                filter_indices => [ 'flatter', 'filter_indices' ],
+                }
 
-    my $error
-        = ref $index ? "'index' must be a single value\n"
-        : defined $index && length $index ? ''
-        :   "Parameter 'index' is a required value\n";
-
-    $self->throw(
-        'Param',
-        $error . $self->_usage( 'get_mapping', { cmd => CMD_INDEX_type } ),
-        { params => $params }
-    ) if $error;
-
-    my $state = $self->cluster_state;
-
-    my $source = $state->{metadata}{indices}{$index}{mappings}
-        or return;
-    my $json = $self->JSON;
-    my @types
-        = !$type ? keys %$source
-        : ref $type eq 'ARRAY' ? @$type
-        :                        $type;
-
-    my %mappings;
-    for (@types) {
-        my $val = $source->{$_}{source} or next;
-        my ( $key, $mapping ) = %{ $json->decode($val) };
-        $mappings{$key} = $mapping;
-    }
-    return $type && !ref $type
-        ? $mappings{$type}
-        : \%mappings;
-
+        },
+        @_
+    );
 }
 
 #===================================
