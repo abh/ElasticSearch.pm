@@ -259,31 +259,6 @@ sub count {
 }
 
 #===================================
-sub terms {
-#===================================
-    shift()->_do_action(
-        'terms',
-        {   cmd     => CMD_index,
-            postfix => '_terms',
-            qs      => {
-                'fields'   => [ 'flatten', 'fields' ],
-                'gt'       => [ 'string',  'gt' ],
-                'lt'       => [ 'string',  'lt' ],
-                'gte'      => [ 'string',  'gte' ],
-                'lte'      => [ 'string',  'lte' ],
-                'prefix'   => [ 'string',  'prefix' ],
-                'regexp'   => [ 'string',  'regexp' ],
-                'min_freq' => [ 'int',     'min_freq' ],
-                'max_freq' => [ 'int',     'max_freq' ],
-                'size'     => [ 'int',     'size' ],
-                'sort'     => [ 'enum',    'sort', [qw(term freq)] ],
-            }
-        },
-        @_
-    );
-}
-
-#===================================
 sub mlt {
 #===================================
     shift()->_do_action(
