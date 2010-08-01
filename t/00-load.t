@@ -2,7 +2,8 @@
 
 #use Test::Most qw(defer_plan);
 our $test_num;
-BEGIN { $test_num = 156 }
+BEGIN { $test_num = 175 }
+
 use Test::Most tests => $test_num;
 use Module::Build;
 use File::Spec::Functions qw(catfile);
@@ -31,8 +32,20 @@ SKIP: {
     like $es->current_server, qr{http://}, 'Current server set';
 
     ### CLUSTER STATE ###
+    wait_for_es();
 
     my $r;
+
+    isa_ok $r = $es->current_server_version, 'HASH', 'Current server version';
+    ok $r->{number}, ' - has a version string';
+    ok $r->{date},   ' - has a build date';
+    ok defined $r->{snapshot_build}, ' - has snapshot_build';
+
+    diag "Current server is "
+        . ( $r->{snapshot_build} ? 'development ' : '' )
+        . "version "
+        . $r->{number};
+    diag "Built: " . $r->{date};
 
     isa_ok $r = $es->cluster_state, 'HASH', 'Cluster state';
     isa_ok $r->{metadata},      'HASH', ' - has metadata';
@@ -47,6 +60,8 @@ SKIP: {
 
     my @nodes     = ( keys %{ $r->{nodes} } );
     my $num_nodes = @nodes;
+
+    diag "Detected $num_nodes running nodes";
 
     isa_ok $r = $es->nodes( node => $nodes[0] ), 'HASH', ' - single node';
     is keys %{ $r->{nodes} }, 1, ' - retrieved one node';
@@ -114,7 +129,11 @@ SKIP: {
     throws_ok { $es->index_status( index => $Index_2 ) } qr/\[.*\] missing/,
         ' - index deleted';
 
+    wait_for_es();
+
     $es->create_index( index => $Index_2 );
+
+    wait_for_es();
 
     ### REFRESH INDEX ###
     ok $es->refresh_index()->{ok}, 'Refresh index';
@@ -122,15 +141,21 @@ SKIP: {
     ### FLUSH INDEX ###
     ok $es->flush_index()->{ok}, 'Flush index';
     ok $es->flush_index( refresh => 1 )->{ok}, ' - with refresh';
+    ok $es->flush_index( full    => 1 )->{ok}, ' - with full';
 
     ### OPTIMIZE INDEX ###
     ok $es->optimize_index()->{ok}, 'Optimize all indices';
+    wait_for_es();
     ok $es->optimize_index( only_deletes => 1 )->{ok}, ' - only_deletes';
-    ok $es->optimize_index( flush        => 1 )->{ok}, ' - with flush';
-    ok $es->optimize_index( refresh      => 1 )->{ok}, ' - with refresh';
+    wait_for_es();
+    ok $es->optimize_index( flush => 1 )->{ok}, ' - with flush';
+    wait_for_es();
+    ok $es->optimize_index( refresh => 1 )->{ok}, ' - with refresh';
+    wait_for_es();
     ok $es->optimize_index( flush => 1, refresh => 1, only_deletes => 1 )
         ->{ok},
         ' - with flush, refresh and only_deletes';
+    wait_for_es();
 
     ok $es->optimize_index( index => [ $Index, $Index_2 ] )->{ok},
         'Optimize test indices';
@@ -169,10 +194,9 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } }
-        ),
+        actions => { add => { alias => 'alias_1', index => $Index } } ),
         'add alias_1';
-    wait_for_es(1);
+    wait_for_es();
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
     ok $es->aliases(
         actions => [
@@ -181,7 +205,7 @@ SKIP: {
         ]
         ),
         'add and remove alias_1';
-    wait_for_es(1);
+    wait_for_es();
     is $es->get_aliases->{aliases}{alias_1}[0], $Index_2, 'alias_1 changed';
 
     ### INDEX DOCUMENTS ###
@@ -197,7 +221,7 @@ SKIP: {
         'HASH', 'Index document';
     ok $r->{ok}, ' - Indexed';
     is $r->{_id}, 1, ' - ID matches';
-    wait_for_es(2);
+    wait_for_es();
 
     isa_ok $r= $es->get( index => $Index, type => 'test', id => 1 ), 'HASH',
         'Get document';
@@ -224,7 +248,7 @@ SKIP: {
         ),
         'HASH', 'Create document';
 
-    wait_for_es(1);
+    wait_for_es();
     ok $r->{ok}, ' - Created';
     is $r->{_id}, 1, ' - ID matches';
 
@@ -247,7 +271,7 @@ SKIP: {
         ),
         'HASH', ' - re-set document';
 
-    wait_for_es(1);
+    wait_for_es();
     is $es->search(
         index => $Index,
         type  => 'test',
@@ -260,6 +284,8 @@ SKIP: {
     drop_indices();
     $es->create_index( index => $_ ) for ( $Index, $Index_2 );
 
+    wait_for_es();
+
     ok $es->put_mapping(
         index => [ $Index, $Index_2 ],
         type  => 'test',
@@ -268,30 +294,34 @@ SKIP: {
         ),
         'Create mapping';
 
-    isa_ok my $mapping = $es->get_mapping( index => $Index, type => 'test' ),
+    wait_for_es();
+
+    isa_ok my $mapping = $es->mapping( index => $Index, type => 'test' ),
         'HASH', ' - index 1 mapping exists';
 
-    is $mapping->{properties}{text}{type}, 'string',  ' - index 1 string map';
-    is $mapping->{properties}{num}{type},  'integer', ' - index 1 int map';
+    is $mapping->{$Index}{test}{properties}{text}{type}, 'string',
+        ' - index 1 string map';
+    is $mapping->{$Index}{test}{properties}{num}{type}, 'integer',
+        ' - index 1 int map';
 
     throws_ok {
         $es->put_mapping(
             index      => [ $Index, $Index_2 ],
             type       => 'test',
             properties => {
-                text => { type => 'string' },
-                num  => { type => 'integer' }
+                text => { type => 'integer' },
+                num  => { type => 'string' }
             },
         );
     }
-    qr/exists, can't merge/, 'Error on duplicate mapping';
+    qr/Merge failed/, 'Error on merging mapping';
 
     ok $r= $es->put_mapping(
         index      => [ $Index, $Index_2 ],
         type       => 'test',
         properties => {
-            text => { type => 'string' },
-            num  => { type => 'integer' }
+            text => { type => 'integer' },
+            num  => { type => 'string' }
         },
         ignore_conflicts => 1,
         ),
@@ -305,65 +335,80 @@ SKIP: {
         ),
         'Create second mapping';
 
-    is join( '-', sort keys %{ $es->get_mapping( index => $Index ) } ),
+    is join( '-', sort keys %{ $es->mapping( index => $Index )->{$Index} } ),
         'test-test_2', ' - get all mappings';
 
     is join(
         '-',
         sort keys %{
-            $es->get_mapping(
+            $es->mapping(
                 index => $Index,
                 type  => [ 'test', 'test_2', 'test_3' ]
-            )
+                )->{$Index}
             }
         ),
         'test-test_2', ' - get list of mappings';
 
-    ok !defined $es->get_mapping( index => $Index, type => 'test_3' ),
+    ok 0 ==
+        keys %{ $es->mapping( index => $Index, type => 'test_3' )->{$Index} },
         ' - get unknown mapping';
 
     ### QUERY TESTS ###
     index_test_docs();
 
     # MATCH ALL
-    isa_ok $r= $es->search( query => { match_all => {} } ), 'HASH',
+    isa_ok $r= $es->search( query => { match_all => {} } ),
+        'HASH',
         "Match all";
-    is $r->{hits}{total}, 28, ' - total correct';
+    is $r->{hits}{total}, 29, ' - total correct';
     is @{ $r->{hits}{hits} }, 10, ' - returned 10 results';
+    is $r->{hits}{max_score}, 1, ' - max score 1';
+
+    # MATCH NONE
+    isa_ok $r
+        = $es->search( query => { field => { text => 'llll' } } ),
+        'HASH',
+        "Match none";
+    is $r->{hits}{total}, 0, ' - total correct';
+    is @{ $r->{hits}{hits} }, 0, ' - returned 10 results';
+    ok exists $r->{hits}{max_score}, ' - max score exists';
+    ok !defined $r->{hits}{max_score}, ' - max score not defined';
 
     # RETRIEVE ALL RESULTS
-    isa_ok $r= $es->search( query => { match_all => {} }, size => 100 ),
-        'HASH', "Match up to 100";
-    is $r->{hits}{total}, 28, ' - total correct';
-    is @{ $r->{hits}{hits} }, 28, ' - returned 28 results';
+    isa_ok $r
+        = $es->search( query => { match_all => {} }, size => 100 ),
+        'HASH',
+        "Match up to 100";
+    is $r->{hits}{total}, 29, ' - total correct';
+    is @{ $r->{hits}{hits} }, 29, ' - returned 29 results';
 
     # QUERY_THEN_FETCH
     isa_ok $r= $es->search(
         query       => { match_all => {} },
         search_type => 'query_then_fetch'
         ),
-        'HASH', "query_then_fetch";
-    is $r->{hits}{total}, 28, ' - total correct';
+        'HASH',
+        "query_then_fetch";
+    is $r->{hits}{total}, 29, ' - total correct';
     is @{ $r->{hits}{hits} }, 10, ' - returned 10 results';
 
-SKIP: {
+    # QUERY_AND_FETCH
 
-        # QUERY_AND_FETCH
-        skip "Requires more than 1 node ", 3 unless $num_nodes > 1;
-
-        isa_ok $r= $es->search(
-            query       => { match_all => {} },
-            search_type => 'query_and_fetch'
-            ),
-            'HASH', "query_and_fetch";
-        is $r->{hits}{total}, 28, ' - total correct';
-        ok @{ $r->{hits}{hits} } > 10, ' - returned  > 10 results';
-    }
+    isa_ok $r= $es->search(
+        query       => { match_all => {} },
+        search_type => 'query_and_fetch'
+        ),
+        'HASH',
+        "query_and_fetch";
+    is $r->{hits}{total}, 29, ' - total correct';
+    ok @{ $r->{hits}{hits} } > 10, ' - returned  > 10 results';
 
     # TERM SEARCH
-    isa_ok $r= $es->search( query => { term => { text => 'foo' } } ), 'HASH',
+    isa_ok $r
+        = $es->search( query => { term => { text => 'foo' } } ),
+        'HASH',
         "Match text: foo";
-    is $r->{hits}{total}, 16, ' - total correct';
+    is $r->{hits}{total}, 17, ' - total correct';
 
     # QUERY STRING SEARCH
     isa_ok $r = $es->search(
@@ -371,48 +416,74 @@ SKIP: {
             query_string => { default_field => 'text', query => 'foo OR bar' }
         }
         ),
-        'HASH', "Match text: bar foo";
+        'HASH',
+        "Match text: bar foo";
 
     # FACETS SEARCH
 
     isa_ok $r = $es->search(
         facets => {
-            baz_facet => { query => { term => { text => 'baz' } } },
-            bar_facet => { query => { term => { text => 'bar' } } }
+            all_terms => { terms => { field => 'text' }, },
+            bar_facet => {
+                terms  => { field => 'text' },
+                filter => { term  => { text => 'bar' } }
+            }
         },
         query => { term => { text => 'foo' } }
         ),
-        'HASH', "Facets search";
+        'HASH',
+        "Facets search";
 
-    is $r->{hits}{total},       16, ' - total correct';
-    is $r->{facets}{baz_facet}, 8,  ' - first facet correct';
-    is $r->{facets}{bar_facet}, 8,  ' - second facet correct';
+    is $r->{hits}{total}, 17, ' - total correct';
+    my $f;
+    isa_ok $f= $r->{facets}{all_terms}, 'HASH', 'all_terms facet';
+    is $f->{_type}, 'terms', ' - is terms facet';
+    is @{ $f->{terms} }, 3, ' - 3 terms listed';
+    is $f->{terms}[0]{term},  'foo', ' - first is foo';
+    is $f->{terms}[0]{count}, 17,    ' - foo count';
+
+    isa_ok $f= $r->{facets}{bar_facet}, 'HASH', 'bar_facet';
+    is $f->{_type}, 'terms', ' - is terms facet';
+    is @{ $f->{terms} }, 3, ' - 3 terms listed';
+    is $f->{terms}[2]{term},  'baz', ' - last is baz';
+    is $f->{terms}[2]{count}, 4,     ' - baz count';
 
     # EXPLAIN SEARCH
-    isa_ok $es->search( query => { term => { text => 'foo' } }, explain => 1 )
-        ->{hits}{hits}[0]{_explanation}, 'HASH',
+    isa_ok $es->search(
+        query   => { term => { text => 'foo' } },
+        explain => 1
+        )->{hits}{hits}[0]{_explanation},
+        'HASH',
         "Query with explain";
 
     # SORT
     is $es->search(
         query => { match_all => {} },
         sort  => ['num'],
-    )->{hits}{hits}[0]{_source}{num}, 2, "Query with sort";
+        )->{hits}{hits}[0]{_source}{num},
+        2,
+        "Query with sort";
 
     is $es->search(
         query => { match_all => {} },
         sort => [ { num => { reverse => \1 } } ],
-    )->{hits}{hits}[0]{_source}{num}, 29, " - reverse sort";
+        )->{hits}{hits}[0]{_source}{num},
+        31,
+        " - reverse sort";
 
     is $es->search(
         query => { match_all => {} },
         sort  => { 'num'     => 'asc' },
-    )->{hits}{hits}[0]{_source}{num}, 2, " - asc";
+        )->{hits}{hits}[0]{_source}{num},
+        2,
+        " - asc";
 
     is $es->search(
         query => { match_all => {} },
         sort => [ { num => 'desc' } ],
-    )->{hits}{hits}[0]{_source}{num}, 29, " - desc";
+        )->{hits}{hits}[0]{_source}{num},
+        31,
+        " - desc";
 
     # FROM / TO
     ok $r= $es->search(
@@ -429,13 +500,29 @@ SKIP: {
     like $es->search(
         query => { term => { text => 'foo' } },
         fields => [ 'text', 'num' ]
-    )->{hits}{hits}[0]{fields}{text}, qr/foo/, 'Fields query';
+        )->{hits}{hits}[0]{fields}{text},
+        qr/foo/,
+        'Fields query';
+
+    # SCRIPT FIELDS
+    isa_ok $r= $es->search(
+        query => { match_all => {} },
+        script_fields =>
+            { double_num => { script => "doc['num'].value * 2" } },
+        fields => ['num']
+        ),
+        'HASH',
+        'Script fields query';
+    is $r->{hits}{hits}[0]{fields}{double_num},
+        2 * $r->{hits}{hits}[0]{fields}{num},
+        ' - script field calculated';
 
     # HIGHLIGHT
     like $es->search(
         query     => { term   => { text => 'foo' } },
         highlight => { fields => { _all => {} } }
-        )->{hits}{hits}[0]{highlight}{_all}[0], qr{<em>foo</em>},
+        )->{hits}{hits}[0]{highlight}{_all}[0],
+        qr{<em>foo</em>},
         'Highlighting';
 
     # SCROLL
@@ -452,17 +539,21 @@ SKIP: {
     is $r->{hits}{hits}[1]{_id}, 2, ' - second hit is ID 2';
 
 SKIP: {
-        skip "Scroll ID tests - broken on server", 3;
+        skip "Scroll ID tests - broken on server", 6;
         ok $r = $es->scroll( scroll_id => $scroll_id ), ' - next tranche';
         is $r->{hits}{hits}[0]{_id}, 3, ' - first hit is ID 3';
         is $r->{hits}{hits}[1]{_id}, 4, ' - second hit is ID 4';
+
+        ok $r = $es->scroll( scroll_id => $scroll_id ), ' - next tranche';
+        is $r->{hits}{hits}[0]{_id}, 3, ' - first hit is ID 5';
+        is $r->{hits}{hits}[1]{_id}, 4, ' - second hit is ID 6';
     }
 
     # INDICES_BOOST
 
     ok $r= $es->search(
         query => { field => { text => 'foo' } },
-        sort  => ['score'],
+        sort  => ['_score'],
         size  => 2,
         indices_boost => { es_test_1 => 5000, es_test_2 => 0.1 }
         ),
@@ -472,7 +563,7 @@ SKIP: {
     is $r->{hits}{hits}[1]{_id}, 5, ' - second id 5';
     ok $r= $es->search(
         query => { field => { text => 'foo' } },
-        sort  => ['score'],
+        sort  => ['_score'],
         size  => 2,
         indices_boost => { es_test_1 => 0.1, es_test_2 => 5000 }
         ),
@@ -480,26 +571,55 @@ SKIP: {
     is $r->{hits}{hits}[0]{_id}, 4, ' - first id 4';
     is $r->{hits}{hits}[1]{_id}, 3, ' - second id 3';
 
+    # CUSTOM SCORE
+    ok $r= $es->search(
+        query => {
+            custom_score => {
+                query => { match_all => {} },
+                script => "doc['date'].date.toString() > '2010-04-25' ? 2: 1"
+            }
+        }
+        ),
+        'Custom score';
+    is $r->{hits}{total},     29, ' - total is 29';
+    is $r->{hits}{max_score}, 2,  ' - max score is 2';
+    is $r->{hits}{hits}[0]{_score}, 2, ' - first result scores 2';
+    ok $r->{hits}{hits}[0]{_source}{date} gt '2010-04-25',
+        ' - first result has high date';
+    is $r->{hits}{hits}[-1]{_score}, 1, ' - last result scores 1';
+    ok $r->{hits}{hits}[-1]{_source}{date} lt '2010-04-25',
+        ' - last result has low date';
+
     ## COUNT ###
 
-    is $es->count( term => { text => 'foo' } )->{count}, 16, "Count: term";
+    is $es->count( term => { text => 'foo' } )->{count}, 17, "Count: term";
 
-    is $es->count( range => { num => { gte => 10, lte => 20 } } )->{count},
-        11, 'Count: range';
+    is $es->count( range => { num => { gte => 10, lte => 20 } } )
+        ->{count},
+        11,
+        'Count: range';
 
-    is $es->count( range => { num => { gt => 10, lt => 20 } } )->{count},
-        9, 'Count: range, gt/lt';
+    is $es->count( range => { num => { gt => 10, lt => 20 } } )
+        ->{count},
+        9,
+        'Count: range, gt/lt';
 
     is $es->count( prefix => { text => 'ba' } )->{count}, 24, 'Count: prefix';
 
-    is $es->count( wildcard => { text => 'ba?' } )->{count}, 24,
+    is $es->count( wildcard => { text => 'ba?' } )->{count},
+        24,
         'Count: wildcard';
 
-    is $es->count( match_all => {} )->{count}, 28, 'Count: match_all';
+    is $es->count( match_all => {} )->{count}, 29, 'Count: match_all';
 
-    is $es->count( query_string =>
-            { query => 'foo AND bar AND -baz', default_field => 'text' } )
-        ->{count}, 4, 'Count: query_string';
+    is $es->count(
+        query_string => {
+            query         => 'foo AND bar AND -baz',
+            default_field => 'text'
+        }
+        )->{count},
+        4,
+        'Count: query_string';
 
     is $es->count(
         bool => {
@@ -508,7 +628,9 @@ SKIP: {
                 { term => { text => 'bar' } }
             ]
         }
-    )->{count}, 8, 'Count: bool';
+        )->{count},
+        8,
+        'Count: bool';
 
     is $es->count(
         dis_max => {
@@ -517,32 +639,72 @@ SKIP: {
                 { term => { text => 'bar' } }
             ]
         }
-    )->{count}, 24, 'Count: dis_max';
+        )->{count},
+        25,
+        'Count: dis_max';
 
     is $es->count( constant_score =>
             { filter => { terms => { text => [ 'foo', 'bar' ] } } } )
-        ->{count}, 24, 'Count: constant_score';
+        ->{count},
+        25,
+        'Count: constant_score';
 
     is $es->count(
         filtered => {
             query  => { term => { text => 'foo' } },
             filter => { term => { text => 'bar' } }
         }
-    )->{count}, 8, 'Count: filtered';
+        )->{count},
+        8,
+        'Count: filtered';
 
-    is $es->count( field => { text => 'foo' } )->{count}, 16, 'Count: field';
+    is $es->count( field => { text => 'foo' } )->{count}, 17, 'Count: field';
+
+    is $es->count(
+        fuzzy => {
+            text => {
+                value          => 'bart',
+                prefix_length  => 1,
+                min_similarity => 0.4
+            }
+        }
+    )->{count}, 16, 'Count: fuzzy';
 
     is $es->count( flt => { fields => ['text'], like_text => 'bat' } )
-        ->{count}, 24, 'fuzzy_like_this';
+        ->{count},
+        24,
+        'Count: fuzzy_like_this';
 
     is $es->count( flt_field => { text => { like_text => 'fooo' } } )
-        ->{count}, 16, 'fuzzy_like_this_field';
+        ->{count},
+        17,
+        'Count: fuzzy_like_this_field';
 
     is $es->count( mlt => { like_text => 'foo bar baz', min_term_freq => 1 } )
-        ->{count}, 10, 'Count: more_like_this';
+        ->{count},
+        10,
+        'Count: more_like_this';
     is $es->count( mlt_field =>
             { text => { like_text => 'foo bar baz', min_term_freq => 1 } } )
-        ->{count}, 10, 'Count: more_like_this';
+        ->{count},
+        10,
+        'Count: more_like_this';
+
+    is $es->count(
+        span_first => {
+            match => {
+                span_near => {
+                    clauses => [
+                        { span_term => { text => 'baz' } },
+                        { span_term => { text => 'bar' } }
+                    ],
+                    slop     => 0,
+                    in_order => 0
+                }
+            },
+            end => 2
+        }
+    )->{count}, 4, 'Count: span queries';
 
     ### MORE LIKE THIS
     is $es->mlt(
@@ -552,103 +714,22 @@ SKIP: {
         mlt_fields    => ['text'],
         min_term_freq => 1,
         min_doc_freq  => 1
-    )->{hits}{total}, 3, 'more_like_this';
-
-    ### TERMS
-    # add another foo to make the document frequency uneven
-    $es->set(
-        index => $Index,
-        type  => 'type_1',
-        id    => 30,
-        data  => { text => 'foo' }
-    );
-    wait_for_es(1);
-
-    isa_ok $r= $es->terms( fields => 'text' )->{fields}{text}{terms},
-        'ARRAY', "All terms";
-    is $r->[2]{doc_freq}, 17, ' - foo doc_freq';
-    is $r->[0]{doc_freq}, 16, ' - bar doc_freq';
-
-    is $es->terms( index => $Index, fields => 'text' )
-        ->{fields}{text}{terms}[2]{doc_freq}, 9, ' - foo on index 1';
-
-    is $es->terms( fields => 'text', min_freq => 17 )
-        ->{fields}{text}{terms}[0]{term}, 'foo', ' - min_freq';
-    is $es->terms( fields => 'text', max_freq => 16 )
-        ->{fields}{text}{terms}[-1]{term}, 'baz', ' - max_freq';
-
-    is @{ $es->terms( fields => 'text', size => 2 )->{fields}{text}{terms} },
-        2, ' - size';
-    is $es->terms( fields => 'text', sort => 'freq' )
-        ->{fields}{text}{terms}[0]{term}, 'foo', ' - sort freq';
-
-    is join(
-        '-',
-        map { $_->{term} } @{
-            $es->terms(
-                fields => 'text',
-                gte    => 'baz',
-                )->{fields}{text}{terms}
-            }
-        ),
-        'baz-foo', ' - gte';
-    is join(
-        '-',
-        map { $_->{term} } @{
-            $es->terms(
-                fields => 'text',
-                lte    => 'baz',
-                )->{fields}{text}{terms}
-            }
-        ),
-        'bar-baz', ' - lte';
-
-    is join(
-        '-',
-        map { $_->{term} } @{
-            $es->terms(
-                fields => 'text',
-                gt     => 'baz',
-                )->{fields}{text}{terms}
-            }
-        ),
-        'foo', ' - gt';
-    is join(
-        '-',
-        map { $_->{term} } @{
-            $es->terms( fields => 'text', lt => 'baz' )->{fields}{text}{terms}
-            }
-        ),
-        'bar', ' - lt';
-
-    is join(
-        '-',
-        map { $_->{term} } @{
-            $es->terms( fields => 'text', prefix => 'ba' )
-                ->{fields}{text}{terms}
-            }
-        ),
-        'bar-baz', ' - prefix';
-    is join(
-        '-',
-        map { $_->{term} } @{
-            $es->terms( fields => 'text', regexp => 'foo|baz' )
-                ->{fields}{text}{terms}
-            }
-        ),
-        'baz-foo', ' - regexp';
+        )->{hits}{total},
+        4,
+        'more_like_this';
 
     ###  DELETE_BY_QUERY ###
     ok $es->delete_by_query( term => { text => 'foo' } )->{ok},
         "Delete by query";
-    wait_for_es(1);
+    wait_for_es();
     is $es->count( term => { text => 'foo' } )->{count}, 0, " - foo deleted";
-    is $es->count( term => { text => 'bar' } )->{count}, 8,
+    is $es->count( term => { text => 'bar' } )->{count},
+        8,
         " - bar not deleted";
 
 }
 
-# all_done;
+#all_done;
 
 sub index_test_docs {
 
@@ -660,7 +741,10 @@ sub index_test_docs {
     $es->create_index( index => $_ ) for ( $Index, $Index_2 );
     $es->put_mapping(
         type => 'type_1',
-        _all => { store => "yes", term_vector => "with_positions_offsets" },
+        _all => {
+            store       => "yes",
+            term_vector => "with_positions_offsets"
+        },
         properties => {
             text => { type => 'string',  store  => 'yes' },
             num  => { type => 'integer', store  => 'yes' },
@@ -670,7 +754,10 @@ sub index_test_docs {
 
     $es->put_mapping(
         type => 'type_2',
-        _all => { store => "yes", term_vector => "with_positions_offsets" },
+        _all => {
+            store       => "yes",
+            term_vector => "with_positions_offsets"
+        },
         properties => {
             text => { type => 'string',  store  => 'yes' },
             num  => { type => 'integer', store  => 'yes' },
@@ -702,14 +789,27 @@ sub index_test_docs {
                     data  => {
                         text => $phrase,
                         num  => $id,
-                        date => "2010-04-$id 00:00:00"
+                        date => sprintf( "2010-04-%02d 00:00:00", $id )
                     }
                 );
 
             }
         }
     }
-    wait_for_es(1);
+
+    # add another foo to make the document frequency uneven
+    $es->set(
+        index => $Index,
+        type  => 'type_1',
+        id    => 30,
+        data  => {
+            text => 'foo',
+            num  => 31,
+            date => "2010-05-01 00:00:00"
+        }
+    );
+
+    wait_for_es();
 
 }
 
@@ -723,9 +823,12 @@ sub drop_indices {
 }
 
 sub wait_for_es {
-    $es->refresh_index();
-    $es->cluster_health( wait_for_status => 'green', timeout => '2s' );
     sleep $_[0] if $_[0];
+    $es->cluster_health(
+        wait_for_status => 'green',
+        timeout         => '30s'
+    );
+    $es->refresh_index();
 }
 
 my @PIDs;
@@ -774,6 +877,9 @@ gateway:    {type: none}
 node:       {data: true}
 http:       {enabled: true}
 path:       {work: $work_dir}
+network:
+    host:   127.0.0.1
+
 CONFIG
 
     for ( 1 .. $instances ) {
@@ -806,7 +912,10 @@ CONFIG
     die "Couldn't start $instances nodes" if @servers;
 
     my $es = eval {
-        ElasticSearch->new( servers => $server, trace_calls => 'log' );
+        ElasticSearch->new(
+            servers     => $server,
+            trace_calls => 'log'
+        );
         }
         or diag("**** Couldn't connect to ElasticSearch at $server ****");
     return $es;
