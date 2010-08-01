@@ -1,4 +1,28 @@
 Revision history for ElasticSearch
+0.18    2010-08-01
+        Updated Changes file
+
+0.17    2010-08-01
+
+        Supports ElasticSearch version 0.9, which removes support for some
+        features of older versions.
+
+      - In search() added support for 'script_fields'
+      - In count() and delete_by_query() added support for 'custom_score',
+        'fuzzy', 'span_term', 'span_first', 'span_near', 'span_not',
+        'span_or'
+      - Removed terms() - now handled by search facets
+      - Added the 'full' parameter to flush_index()
+      - Changed put_mapping() to automatically prefix the type properties
+        definition with the type name
+      - Removed get_mapping() and replaced it with mapping(), which uses
+        the newly exposed GET _mapping API
+      - Added current_server_version()
+      - Added the 'filter_nodes', 'filter_metadata', 'filter_routing_table'
+        and 'filter_indices' params to cluster_state()
+
+
+
 0.16    2010-05-20
         Added an ElasticSearch::Error::Timeout error class, to catch
         occassions when the request times out, instead of failing
