@@ -1,0 +1,848 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>Elastic Search - you know, for search</title>
+<meta http-equiv="content-type" content="text/html; charset=iso-8859-1" />
+<meta name="generator" content="pod2s5 0.08" />
+<meta name="generator" content="S5" />
+<meta name="version" content="S5 1.1" />
+<meta name="presdate" content="2 Aug 2010" />
+<meta name="author" content="Clinton Gormley" />
+<meta name="company" content="&nbsp;" />
+<!-- configuration parameters -->
+<meta name="defaultView" content="slideshow" />
+<meta name="controlVis" content="hidden" />
+<!-- style sheet links -->
+<link rel="stylesheet" href="ui/default/slides.css" type="text/css" media="projection" id="slideProj" />
+<link rel="stylesheet" href="ui/default/outline.css" type="text/css" media="screen" id="outlineStyle" />
+<link rel="stylesheet" href="ui/default/print.css" type="text/css" media="print" id="slidePrint" />
+<link rel="stylesheet" href="ui/default/opera.css" type="text/css" media="projection" id="operaFix" />
+
+<!-- embedded styles -->
+<style type="text/css" media="all">
+.imgcon {width: 525px; margin: 0 auto; padding: 0; text-align: center;}
+#anim {width: 270px; height: 320px; position: relative; margin-top: 0.5em;}
+#anim img {position: absolute; top: 42px; left: 24px;}
+img#me01 {top: 0; left: 0;}
+img#me02 {left: 23px;}
+img#me04 {top: 44px;}
+img#me05 {top: 43px;left: 36px;}
+</style>
+<!-- S5 JS -->
+<script src="ui/default/slides.js" type="text/javascript"></script>
+<!--
+   tom AT cpan.org:
+   this will not work, it's not contained
+   in the downloadable S5
+   <script src="/mint/?js" type="text/javascript"></script></head>
+-->
+<body>
+
+<div class="layout">
+
+<div id="controls"></div>
+<div id="currentSlide"></div>
+<div id="header"></div>
+<div id="footer">
+<h1>YAPC::EU 2010 &#8226; 2 Aug 2010</h1>
+<h2>Elastic Search - you know, for search</h2></div>
+</div><div class="slide">
+<h1>ElasticSearch
+
+</h1><h2>&#8220;You know, for search&#8221;
+
+</h2><h3></h3><h4>Clinton Gormley, YAPC::EU 2010
+
+</h4></div>
+<div class="slide">
+<h1>Overview
+
+</h1><ul class="incremental"><li level="1"><p>About me
+
+</p></li><li level="1"><p>What is ElasticSearch?
+
+</p></li><li level="1"><p>Why ElasticSearch?
+
+</p></li><li level="1"><p>Installing and configuring
+
+</p></li><li level="1"><p>How the cluster works
+
+</p></li><li level="1"><p>Indexing and retrieving documents
+
+</p></li><li level="1"><p>Search features
+
+</p></li><li level="1"><p>What next?
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>About me
+
+</h1><p><img style="float:right" src="homepage.png" />
+
+
+</p><ul class="incremental"><li level="1"><p>Clinton Gormley (DrTech)
+
+</p></li><li level="1"><p>Author of ElasticSearch.pm
+
+</p></li><li level="1"><p>CTO of iAnnounce
+
+</p></li><li level="1"><p>Family announcements platform for newspapers
+
+</p></li><li level="1"><p>Lots of full text search
+
+</p></li><li level="1"><p>MySQL couldn't keep up
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>What is ElasticSearch?
+
+</h1><ul class="incremental"><li level="1"><p>Full text search engine
+
+</p></li><li level="1"><p>Lucene based / Written in Java
+
+</p></li><li level="1"><p>Open source
+
+</p></li><li level="1"><p>Written by Shay Bannon (kimchy)
+
+</p><ul class="incremental"><li level="1"><p>technical director of Gigaspaces
+
+</p></li><li level="1"><p>author of Compass (used by YouTube)
+
+</p></li></ul class="incremental"></li></ul class="incremental"></div>
+<div class="slide">
+<h1>What is ElasticSearch.pm
+
+</h1><ul class="incremental"><li level="1"><p>Thin interface to talk to ElasticSearch
+
+</p></li><li level="1"><p>Connects to an ElasticSearch cluster
+
+</p></li><li level="1"><p>Downloads active list of nodes
+
+</p></li><li level="1"><p>Randomly selects one node
+
+</p></li><li level="1"><p>Reconnects automatically if dropped, or forked
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Why ElasticSearch?
+
+</h1><h2>First make it easy - then make it powerful
+
+</h2><ul class="incremental"><li level="1"><p>Pain free installation/configuration
+
+</p></li><li level="1"><p>High availability
+
+</p></li><li level="1"><p>Scalability - one node to hundreds
+
+</p></li><li level="1"><p>Fits your domain model
+
+</p></li><li level="1"><p>Power and flexibility of Lucene
+
+</p></li><li level="1"><p>JSON with REST over HTTP - easy to debug
+
+</p></li><li level="1"><p>Cloud ready
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Installing ElasticSearch
+
+</h1><p>Install ElasticSearch
+
+</p>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;<font color="#c9a7ff">wget</font>&nbsp;http://cloud.github.com/downloads/elasticsearch/elasticsearch/elasticsearch-0.9.0.zip<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#c9a7ff">unzip</font>&nbsp;elasticsearch-0.9.0.<font color="#c9a7ff">zip</font><BR>
+<BR>
+</code>
+<div class="incremental">
+<p>Install the service wrapper (optional)
+
+</p>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;<font color="#c9a7ff">wget</font>&nbsp;http://github.com/elasticsearch/elasticsearch-servicewrapper/zipball/master<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#c9a7ff">unzip</font>&nbsp;*servicewraper*.<font color="#c9a7ff">zip</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#c9a7ff">mv</font>&nbsp;*servicewrapper*/service&nbsp;elasticsearch-0.9.0/bin/&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+<BR>
+</code>
+</div>
+<div class="incremental">
+<p>Install ElasticSearch.pm
+
+</p>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;cpanm&nbsp;ElasticSearch<BR>
+<BR>
+</code></div></div>
+<div class="slide">
+<h1>Configuring ElasticSearch
+
+</h1><p><u>./config/elasticsearch.yml</u>
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;cluster:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MyCluster<br><br>&nbsp;&nbsp;&nbsp;&nbsp;network:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;host:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;127.0.0.1<br><br>&nbsp;&nbsp;&nbsp;&nbsp;gateway:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;type:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fs<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fs:&nbsp;<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;location:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/opt/es_data/&nbsp;&nbsp;#&nbsp;shared&nbsp;dir,&nbsp;eg&nbsp;NFS&nbsp;</code></div>
+<div class="slide">
+<h1>Starting ElasticSearch
+
+</h1><ul class="incremental"><li level="1"><p>Start node in the background:
+
+</p>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;./bin/elasticsearch<BR>
+<BR>
+</code></li><li level="1"><p>Start node in the foreground:
+
+</p>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;./bin/elasticsearch&nbsp;-f<BR>
+<BR>
+</code></li><li level="1"><p>Use the service wrapper:
+
+</p>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;./bin/service/elasticsearch&nbsp;start&nbsp;<b>|</b>&nbsp;stop&nbsp;<b>|</b>&nbsp;restart<BR>
+<BR>
+</code></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Check that it is running
+
+
+</h1>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;curl&nbsp;-XGET&nbsp;<font color="#ff0000">'http://127.0.0.1:9200/_cluster/state?pretty=true'</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+</code>
+<code class="incremental">&nbsp;&nbsp;&nbsp;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"cluster_name"</font>&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;<font color="#ff0000">"MyCluster"</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"master_node"</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;<font color="#ff0000">"57a8fcd6-3867-465f-a960-b748fc61ff76"</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"blocks"</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;{&nbsp;},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"nodes"</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"57a8fcd6-3867-465f-a960-b748fc61ff76"</font>&nbsp;:&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"name"</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;<font color="#ff0000">"Vindaloo"</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"transport_address"</font>&nbsp;&nbsp;&nbsp;:&nbsp;<font color="#ff0000">"inet[/127.0.0.1:9300]"</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"metadata"</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;{&nbsp;<font color="#ff0000">"indices"</font>&nbsp;:&nbsp;{&nbsp;}&nbsp;},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"routing_table"</font>&nbsp;&nbsp;&nbsp;:&nbsp;{&nbsp;<font color="#ff0000">"indices"</font>&nbsp;:&nbsp;{&nbsp;}&nbsp;},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"routing_nodes"</font>&nbsp;&nbsp;&nbsp;:&nbsp;{&nbsp;<font color="#ff0000">"unassigned"</font>&nbsp;:&nbsp;[&nbsp;],&nbsp;<font color="#ff0000">"nodes"</font>&nbsp;:&nbsp;{&nbsp;}&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+<BR>
+</code></div>
+<div class="slide">
+<h1>Connecting to ElasticSearch
+
+</h1>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<b>use</b>&nbsp;ElasticSearch();<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<b>my</b>&nbsp;<font color="#0000ff">$c</font>&nbsp;=&nbsp;ElasticSearch-&gt;new(&nbsp;servers&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">127.0.0.1:9200</font><font color="#ffa500">'</font>&nbsp;);<BR>
+</code><code class="incremental">
+&nbsp;&nbsp;&nbsp;&nbsp;<b>my</b>&nbsp;<font color="#0000ff">$c</font>&nbsp;=&nbsp;ElasticSearch-&gt;new(&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;servers&nbsp;=&gt;&nbsp;[&nbsp;<font color="#ffa500">'</font><font color="#ff0000">192.168.0.10:9200</font><font color="#ffa500">'</font>,&nbsp;<font color="#ffa500">'</font><font color="#ff0000">192.168.0.11:9200</font><font color="#ffa500">'</font>&nbsp;],<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+</code><code class="incremental">&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">trace_calls</font>(<font color="#00007f">1</font>);&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;STDERR,&nbsp;or&nbsp;$c-&gt;trace_calls('es.log')</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code><code class="incremental">&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">cluster_state</font><font color="#0000ff"><BR>
+</font><BR>
+</code>
+<code class="incremental long">&nbsp;&nbsp;&nbsp;&nbsp;curl&nbsp;-XGET&nbsp;<font color="#ff0000">'http://127.0.0.1:9200/_cluster/state'</font>&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"routing_nodes"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"unassigned"&nbsp;:&nbsp;[],</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"nodes"&nbsp;:&nbsp;{}</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"routing_table"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"indices"&nbsp;:&nbsp;{}</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"blocks"&nbsp;:&nbsp;{},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"metadata"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"indices"&nbsp;:&nbsp;{}</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"nodes"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"57a8fcd6-3867-465f-a960-b748fc61ff76"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"transport_address"&nbsp;:&nbsp;"inet[/127.0.0.1:9300]",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"name"&nbsp;:&nbsp;"Vindaloo"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"master_node"&nbsp;:&nbsp;"57a8fcd6-3867-465f-a960-b748fc61ff76",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"cluster_name"&nbsp;:&nbsp;"MyCluster"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code></div>
+<div class="slide">
+<h1>Create an index
+
+</h1>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">create_index</font>(<font color="#007f00">index</font>=&gt;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>)<BR>
+<BR>
+</code>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;curl&nbsp;-XPUT&nbsp;<font color="#ff0000">'http://127.0.0.1:9200/yapc/'</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"ok"&nbsp;:&nbsp;true,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"acknowledged"&nbsp;:&nbsp;true</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code></div>
+<div class="slide">
+<h1>Create an index
+
+</h1>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">create_index</font>(<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#007f00">index</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;defn&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;number_of_shards&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;&nbsp;<font color="#00007f">3</font>,&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;number_of_replicas&nbsp;&nbsp;=&gt;&nbsp;&nbsp;<font color="#00007f">1</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+<BR>
+</code>
+<code class="long">&nbsp;&nbsp;&nbsp;&nbsp;curl&nbsp;-XPUT&nbsp;<font color="#ff0000">'http://127.0.0.1:9200/talks/'</font>&nbsp;&nbsp;-d&nbsp;<font color="#ff0000">'</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;{</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"index"&nbsp;:&nbsp;{</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"number_of_replicas"&nbsp;:&nbsp;1,</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"number_of_shards"&nbsp;:&nbsp;3</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;}</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;'</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"ok"&nbsp;:&nbsp;true,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"acknowledged"&nbsp;:&nbsp;true</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code></div>
+<div class="slide">
+<h1>Indices, Shards and Nodes
+
+</h1><ul class="incremental"><li level="1"><p><b>Node</b> &#8658; Instance of ElasticSearch
+
+</p></li><li level="1"><p>Master node / Data node / Non-data nodes
+
+</p></li><li level="1"><p><b>Index</b> &#8764; Namespace / Database
+
+</p></li><li level="1"><p>Each index can have its own settings
+
+</p></li><li level="1"><p>Data assigned to a <b>Shards</b>
+
+</p></li><li level="1"><p>Each shard is a Lucene instance
+
+</p></li><li level="1"><p>Primary shard / Replica shard
+    
+</p></li><li level="1"><p>A shard is assigned to a node, relocatable
+
+</p></div>
+<div class="slide">
+<h1>How the cluster works
+
+</h1><ul class="incremental"><li level="1"><p>auto-discovery - multicast or unicast
+
+</p></li><li level="1"><p>no fixed master - master elected
+
+</p></li><li level="1"><p>auto-balanced
+
+</p></li><li level="1"><p>load balanced
+
+</p></li></ul class="incremental"><p class="images"><img  class="incremental" src="node_1.png" />
+
+<img class="incremental" src="node_2.png" />
+
+<img class="incremental" src="node_3.png" />
+
+
+</p></div>
+<div class="slide">
+<h1>Storing data to the cluster
+
+</h1><p class="images" style="height:250px"><img src="put_1.png" />
+
+<img class="incremental" src="put_2.png" />
+
+<img class="incremental" src="put_3.png" />
+
+
+</p><p>Index a document which is hashed to Shard 3
+
+</p></div>
+<div class="slide">
+<h1>Searching the cluster
+
+</h1><p>Map/Reduce or Scatter/Gather
+
+</p><p class="images" style="height: 250px"><img class="incremental" src="search_1.png" />
+
+<img class="incremental" src="search_2.png" />
+
+<img class="incremental" src="search_3.png" />
+
+<img class="incremental" src="search_4.png" />
+
+
+</p></div>
+<div class="slide">
+<h1>Primaries vs Replicas
+
+</h1><ul class="incremental"><li level="1"><p>more primary shards
+
+</p><ul class="incremental"><li level="1"><p>more data
+
+</p></li><li level="1"><p>more scalability
+
+</p></li></ul class="incremental"></li><li level="1"><p>more replicas
+
+</p><ul class="incremental"><li level="1"><p>higher availability
+
+</p></li><li level="1"><p>faster searches
+
+</p></li><li level="1"><p>more scalablility
+
+</p></li></ul class="incremental"></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Data structure
+
+</h1><p>Each document has:
+
+</p><ul class="incremental"><li level="1"><p>Index
+
+</p></li><li level="1"><p>Type
+
+</p></li><li level="1"><p>ID (if not present, auto-generated)
+
+</p></li><li level="1"><p>Data
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Indexing a document
+
+</h1>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">index</font>(&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#007f00">index</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>,&nbsp;type&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">talk</font><font color="#ffa500">'</font>,&nbsp;id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">1</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;data&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;title&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">ElasticSearch,&nbsp;you&nbsp;know,&nbsp;for&nbsp;search</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;subject&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">A&nbsp;discussion&nbsp;of&nbsp;blah&nbsp;blah&nbsp;blah...</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;date&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">2010-08-06</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;duration&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">20</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;votes&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">10</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tags&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;[<font color="#ffa500">'</font><font color="#ff0000">perl</font><font color="#ffa500">'</font>,<font color="#ffa500">'</font><font color="#ff0000">lucene</font><font color="#ffa500">'</font>,<font color="#ffa500">'</font><font color="#ff0000">magic</font><font color="#ffa500">'</font>],<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;speaker&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">Clinton&nbsp;Gormley</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;email&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">clint@traveljury.com</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"ok"&nbsp;:&nbsp;true,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_index"&nbsp;:&nbsp;"yapc",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_id"&nbsp;:&nbsp;"1",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_type"&nbsp;:&nbsp;"talk"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code></div>
+<div class="slide">
+<h1>Indexing a document
+
+</h1><ul class="incremental"><li level="1"><p>No need to commit
+
+</p></li><li level="1"><p>Transparently distributed to replicas
+
+</p></li><li level="1"><p>Near real time (1 second)
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Retrieve a document
+
+</h1>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">get</font>(<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#007f00">index</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;type&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">talk</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">1</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+<BR>
+</code>
+<code class="incremental long" style="max-height: 24em">&nbsp;&nbsp;&nbsp;&nbsp;curl&nbsp;-XGET&nbsp;<font color="#ff0000">'http://127.0.0.1:9200/yapc/talk/1'</font>&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_source"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"subject"&nbsp;:&nbsp;"A&nbsp;discussion&nbsp;of&nbsp;blah&nbsp;blah&nbsp;blah...",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"date"&nbsp;:&nbsp;"2010-08-06",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"speaker"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"email"&nbsp;:&nbsp;"clint@traveljury.com",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"name"&nbsp;:&nbsp;"Clinton&nbsp;Gormley"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"title"&nbsp;:&nbsp;"ElasticSearch,&nbsp;you&nbsp;know,&nbsp;for&nbsp;search",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"duration"&nbsp;:&nbsp;20,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"votes"&nbsp;:&nbsp;10,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"tags"&nbsp;:&nbsp;[</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"perl",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"lucene",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"magic"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_index"&nbsp;:&nbsp;"yapc",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_id"&nbsp;:&nbsp;"1",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_type"&nbsp;:&nbsp;"talk"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code></div>
+<div class="slide">
+<h1>Searching
+
+</h1><p><code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">search</font>(<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#007f00">index</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;type&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">talk</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;query&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;field&nbsp;=&gt;&nbsp;{&nbsp;_all&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">magic</font><font color="#ffa500">'</font>&nbsp;}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+<BR>
+</code>
+
+</p>
+<code class="incremental long">&nbsp;&nbsp;&nbsp;&nbsp;curl&nbsp;-XGET&nbsp;<font color="#ff0000">'http://127.0.0.1:9200/yapc/talk/_search'</font>&nbsp;&nbsp;-d&nbsp;<font color="#ff0000">'</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;{</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"query"&nbsp;:&nbsp;{</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"field"&nbsp;:&nbsp;{</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"_all"&nbsp;:&nbsp;"magic"</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;}</font><font color="#ff0000"><BR>
+</font><font color="#ff0000">&nbsp;&nbsp;&nbsp;&nbsp;'</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"hits"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"hits"&nbsp;:&nbsp;[</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"_source"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"subject"&nbsp;:&nbsp;"A&nbsp;discussion&nbsp;of&nbsp;blah&nbsp;blah&nbsp;blah...",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"date"&nbsp;:&nbsp;"2010-08-06",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"speaker"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"email"&nbsp;:&nbsp;"clint@traveljury.com",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"name"&nbsp;:&nbsp;"Clinton&nbsp;Gormley"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"title"&nbsp;:&nbsp;"ElasticSearch,&nbsp;you&nbsp;know,&nbsp;for&nbsp;search",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"duration"&nbsp;:&nbsp;20,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"votes"&nbsp;:&nbsp;10,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"tags"&nbsp;:&nbsp;[</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"perl",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"lucene",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"magic"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"_score"&nbsp;:&nbsp;0.09196241,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"_index"&nbsp;:&nbsp;"yapc",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"_id"&nbsp;:&nbsp;"1",</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"_type"&nbsp;:&nbsp;"talk"</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;],</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"max_score"&nbsp;:&nbsp;0.09196241,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"total"&nbsp;:&nbsp;1</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;},</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;"_shards"&nbsp;:&nbsp;{</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"failed"&nbsp;:&nbsp;0,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"successful"&nbsp;:&nbsp;5,</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"total"&nbsp;:&nbsp;5</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;&nbsp;&nbsp;&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#7f7f7f"><i>#&nbsp;}</i></font><font color="#7f7f7f"><i><BR>
+</i></font><BR>
+</code></div>
+<div class="slide">
+<h1>Searching
+
+</h1><p><code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">search</font>(<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<del><font color="#007f00">index</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</del></font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<del>type&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">talk</font><font color="#ffa500">'</font></del>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;query&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;field&nbsp;=&gt;&nbsp;{&nbsp;_all&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">magic</font><font color="#ffa500">'</font>&nbsp;}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+<BR>
+</code>
+
+</p><ul class="incremental"><li level="1"><p>Search across one, many or all types
+
+</p></li><li level="1"><p>Search across one, many or all indices
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Analysis
+
+</h1><ul class="incremental"><li level="1"><p>All text is analysed
+
+</p></li><li level="1"><p>Lower cased
+
+</p></li><li level="1"><p>Split on punctuation
+
+</p></li><li level="1"><p>Stopwords removed
+
+</p></li><li level="1"><p>Result  &#8658;  Terms
+
+</p></li><li level="1"><p><i>"The Quick Brown fox jumped over the lazy dog's bowl!"</i>
+
+</p><p>&#8658; 'quick', 'brown', 'fox', 'jumped', 'over', 'lazy', 'dog', 'bowl'
+
+</p></li><li level="1"><p>Customisable, but use same analyser at:
+
+</p><ul class="incremental"><li level="1"><p>index time
+
+</p></li><li level="1"><p>search time
+
+</p></li></ul class="incremental"></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Field types
+
+</h1><p>ElasticSearch tries:
+
+</p><ul class="incremental"><li level="1"><p>First, to make it easy
+
+</p></li><li level="1"><p>Then, make it powerful
+
+</p></li></ul class="incremental"><p class="incremental">Tries to guess each field type:
+
+</p>
+<code class="incremental">&nbsp;&nbsp;&nbsp;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"description"</font>:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"foobar"</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;<font color="#9b30ff"><b>string</b></font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"count"</font>:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#00007f">123</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;integer<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"price"</font>:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#00007f">123.45</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;float<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"date"</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"2010-01-01"</font>,&nbsp;&nbsp;&nbsp;#&nbsp;<font color="#9b30ff"><b>date</b></font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+<BR>
+</code></div>
+<div class="slide">
+<h1>Field types
+
+</h1><p>BUT:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"description"</font>:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#00007f">123</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;integer<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"count"</font>:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ff0000">"123"</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;<font color="#9b30ff"><b>string</b></font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+<BR>
+</code>
+<div class="incremental">
+<p>Also:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;<font color="#ff0000">"tags"</font>:&nbsp;&nbsp;&nbsp;[<font color="#ff0000">"magic"</font>]&nbsp;}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;Term&nbsp;&nbsp;<font color="#ff0000">'</font><font color="#ff00ff">magic'</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;<font color="#ff0000">"tags"</font>:&nbsp;&nbsp;&nbsp;[<font color="#ff0000">"black-magic"</font>]&nbsp;}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;Terms&nbsp;<font color="#ff0000">'</font><font color="#ff00ff">black'</font>,<font color="#ff0000">'</font><font color="#ff00ff">magic'</font><BR>
+<BR>
+</code></div></div>
+<div class="slide">
+<h1>Mapping
+
+</h1><p>Mapping gives us control:
+
+</p><ul class="incremental"><li level="1"><p>What data type is a field?
+
+</p></li><li level="1"><p>How is it analysed?
+
+</p></li><li level="1"><p>IS it analysed?
+
+</p></li><li level="1"><p>Should it be stored?
+
+</p></li><li level="1"><p>Should its value be &#8220;boosted&#8221;?
+
+</p></li><li level="1"><p>Should it be searchable through '_all'?
+
+</p></li><li level="1"><p>Should its value be &#8220;highlightable&#8221;?
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Query types: match_all
+
+</h1><p>Match all documents
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">search</font>(&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#007f00">index</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;type&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">talk</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;from&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;0,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">10</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#007f00">sort</font>&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;[<font color="#ffa500">'</font><font color="#ff0000">date</font><font color="#ffa500">'</font>,&nbsp;{&nbsp;votes&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">desc</font><font color="#ffa500">'</font>&nbsp;}&nbsp;],<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;query&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;&nbsp;match_all&nbsp;=&gt;&nbsp;{}&nbsp;}&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;);<BR>
+<BR>
+</code></div>
+<div class="slide">
+<h1>Query types: term / prefix / wildcard
+
+</h1><p>Term:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;term&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;tags&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">magic</font><font color="#ffa500">'</font>&nbsp;}&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+</code><p>Prefix:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;prefix&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;tags&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">mag</font><font color="#ffa500">'</font>&nbsp;}&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+</code><p>Wildcard:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;wildcard&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;tags&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">m*g?c</font><font color="#ffa500">'</font>&nbsp;}&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+</code></div>
+<div class="slide">
+<h1>Query types: Range
+
+</h1><p>Ranges:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;range&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;votes&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">gt</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">10</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">lte</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#00007f">20</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+<BR>
+<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;range&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;speaker.name&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">gte</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">abigail</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">lte</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">larry</font><font color="#ffa500">'</font>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+<BR>
+</code></div>
+<div class="slide">
+<h1>Query types: query_string | field
+
+</h1><p>Field:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;field&nbsp;&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;title&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">know&nbsp;search</font><font color="#ffa500">'</font>&nbsp;}&nbsp;}<BR>
+<BR>
+</code>
+<div class="incremental">
+<p>Query String:
+
+</p>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;query_string&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;query&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">search&nbsp;discussion</font><font color="#ffa500">'</font>&nbsp;}&nbsp;}<BR>
+<BR>
+</code>
+</div>
+<code class="incremental">&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;query_string&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;query&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">(search&nbsp;OR&nbsp;elasticsearch)&nbsp;AND&nbsp;discussion&nbsp;</font><font color="#ffa500">'</font><BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.&nbsp;<font color="#ffa500">'</font><font color="#ff0000">AND&nbsp;speaker.name:(clinton&nbsp;OR&nbsp;clint)</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;phrase_slop&nbsp;=&gt;&nbsp;<font color="#00007f">5</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fields&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;[<font color="#ffa500">'</font><font color="#ff0000">_all</font><font color="#ffa500">'</font>,&nbsp;<font color="#ffa500">'</font><font color="#ff0000">title^5</font><font color="#ffa500">'</font>&nbsp;],<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;use_dis_max&nbsp;=&gt;&nbsp;<font color="#00007f">1</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tie_breaker&nbsp;=&gt;&nbsp;0.<font color="#00007f">5</font>&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;}<BR>
+<BR>
+</code></div>
+<div class="slide">
+<h1>Query types: other
+
+</h1><ul class="incremental"><li level="1"><p>bool - must, should, should_not &#8764; and / or / not
+
+</p></li><li level="1"><p>dis_max - union of text queries, choose most relevant
+
+</p></li><li level="1"><p>filtered
+
+</p></li><li level="1"><p>custom_score - dynamically calculated relevance, eg recency
+
+</p></li><li level="1"><p>fuzzy
+
+</p></li><li level="1"><p>more_like_this
+
+</p></li><li level="1"><p>constant_score - wraps any filter to use as a query
+
+</p></li><li level="1"><p>span_term / span_first / span_near / span_not / span_or
+
+    
+</p></div>
+<div class="slide">
+<h1>Filters
+
+</h1><ul class="incremental"><li level="1"><p>Used to filter results returned by query
+
+</p></li><li level="1"><p>Faster than queries
+
+</p><ul class="incremental"><li level="1"><p>no need to score
+
+</p></li><li level="1"><p>can be cached
+
+</p></li></ul class="incremental"></li><li level="1"><p>Types:
+
+</p><ul class="incremental"><li level="1"><p>term / terms
+
+</p></li><li level="1"><p>script
+
+</p></li><li level="1"><p>range
+
+</p></li><li level="1"><p>prefix
+
+</p></li><li level="1"><p>bool / and / or / not
+
+</p></li><li level="1"><p>constant_score
+
+</p></li><li level="1"><p>geo distance (master on github)
+
+</p></li></ul class="incremental"></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Filter example
+
+</h1>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;<font color="#0000ff">$c</font>-&gt;<font color="#0000ff">search</font>(&nbsp;<font color="#007f00">index</font>&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">yapc</font><font color="#ffa500">'</font>,&nbsp;type&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">talk</font><font color="#ffa500">'</font>,&nbsp;<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">query</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">filtered</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">query</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{&nbsp;<font color="#ffa500">'</font><font color="#ff0000">field</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<font color="#ffa500">'</font><font color="#ff0000">speaker.name</font><font color="#ffa500">'</font>&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">clint*</font><font color="#ffa500">'</font>&nbsp;}},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">filter</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">and</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">filters</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;=&gt;&nbsp;[<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;<font color="#ffa500">'</font><font color="#ff0000">terms</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">tag</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">magic</font><font color="#ffa500">'</font>,<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">duration</font><font color="#ffa500">'</font>&nbsp;&nbsp;=&gt;&nbsp;[<font color="#00007f">20</font>,<font color="#00007f">50</font>]<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;<font color="#ffa500">'</font><font color="#ff0000">range</font><font color="#ffa500">'</font>&nbsp;=&gt;&nbsp;{<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">date</font><font color="#ffa500">'</font>&nbsp;&nbsp;=&gt;&nbsp;{&nbsp;<font color="#ffa500">'</font><font color="#ff0000">from</font><font color="#ffa500">'</font>&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">2010-08-01</font><font color="#ffa500">'</font>,&nbsp;<font color="#ffa500">'</font><font color="#ff0000">to</font><font color="#ffa500">'</font>&nbsp;&nbsp;&nbsp;&nbsp;=&gt;&nbsp;<font color="#ffa500">'</font><font color="#ff0000">2010-08-10</font><font color="#ffa500">'</font>&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<BR>
+&nbsp;&nbsp;&nbsp;&nbsp;}});<BR>
+<BR>
+</code></div>
+<div class="slide">
+<h1>Facets
+
+</h1><p>Facets provide aggregated data based on the search request. 
+
+</p><ul class="incremental"><li level="1"><p>Terms: eg most popular terms for (eg) auto-complete
+
+</p></li><li level="1"><p>Histogram: eg number of posts per week
+
+</p></li><li level="1"><p>Statistics: min, max, count, std dev etc
+
+</p></li><li level="1"><p>Geo-distance: within 1km, 2kms etc (master on github)
+
+</p></li></ul class="incremental"></div>
+<div class="slide">
+<h1>Future for ElasticSearch.pm
+
+</h1><ul class="incremental"><li level="1"><p>ElasticSearch::Query - SQL::Abstract style queries
+
+</p></li><li level="1"><p>ElasticSearch::Transport::
+<ul class="incremental"><li level="2"><p>HTTPLite
+
+</p></li><li level="2"><p>Memcached
+
+</p></li><li level="2"><p>AnyEvent
+
+</p></li></ul class="incremental"></p></ul></div>
+<div class="slide">
+<h1>URLs
+
+</h1><ul><li level="1">ElasticSearch: 
+
+<p><a href="http://www.elasticsearch.com">http://www.elasticsearch.com</a>
+
+</p></li><li level="1">ElasticSearch master: 
+
+<p><a href="http://github.com/elasticsearch/elasticsearch">http://github.com/elasticsearch/elasticsearch</a>
+
+</p></li><li level="1">ElasticSearch.pm: 
+
+<p><a href="http://search.cpan.org/search?query=elasticsearch">http://search.cpan.org/search?query=elasticsearch</a>
+
+</p></li><li level="1">ElasticSearch.pm master: 
+
+<p><a href="http://github.com/clintongormley/elasticsearch.pm">http://github.com/clintongormley/elasticsearch.pm</a>
+
+</p></li><li level="1">ElasticSearch service wrapper:
+
+<p><a href="http://github.com/elasticsearch/elasticsearch-servicewrapper">http://github.com/elasticsearch/elasticsearch-servicewrapper</a>
+
+</p></li></ul></li></ul class="incremental"></li></ul class="incremental"></div></body></html>
