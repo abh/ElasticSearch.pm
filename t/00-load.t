@@ -194,7 +194,8 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } } ),
+        actions => { add => { alias => 'alias_1', index => $Index } }
+        ),
         'add alias_1';
     wait_for_es();
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
@@ -425,8 +426,8 @@ SKIP: {
         facets => {
             all_terms => { terms => { field => 'text' }, },
             bar_facet => {
-                terms  => { field => 'text' },
-                filter => { term  => { text => 'bar' } }
+                terms        => { field => 'text' },
+                facet_filter => { term  => { text => 'bar' } }
             }
         },
         query => { term => { text => 'foo' } }
