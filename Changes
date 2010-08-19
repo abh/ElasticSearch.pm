@@ -1,4 +1,10 @@
 Revision history for ElasticSearch
+
+0.19    2010-08-19
+        Supports ElasticSearch version 0.9.1
+        Minor bug fix to cluster_state
+        Updated tests to use facet_filter instead of filter
+
 0.18    2010-08-01
         Updated Changes file
 

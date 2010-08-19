@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 
 use constant {
     ONE_REQ     => 1,
@@ -1150,7 +1150,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.17, tested against ElasticSearch server version 0.9.0.
+Version 0.19, tested against ElasticSearch server version 0.9.1.
 
 NOTE: Various features present in older versions of the ElasticSearch server
 which have been removed from ElasticSearch 0.9.0 have also been removed from
@@ -1468,7 +1468,7 @@ If a search has been executed with a C<scroll> parameter, then the returned
 C<scroll_id> can be used like a cursor to scroll through the rest of the
 results.
 
-Note - this doesn't seem to work correctly in version 0.9.0 of ElasticSearch.
+Note - this doesn't seem to work correctly in version 0.9.1 of ElasticSearch.
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/search/#Scrolling>
 
@@ -2143,7 +2143,7 @@ Any documents indexed via this module will be not susceptible to this problem.
 
 =item L</"scroll()">
 
-C<scroll()> is broken in version 0.9.0 and earlier versions of ElasticSearch.
+C<scroll()> is broken in version 0.9.1 and earlier versions of ElasticSearch.
 
 See L<http://github.com/elasticsearch/elasticsearch/issues/issue/136>
 
