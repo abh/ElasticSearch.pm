@@ -509,7 +509,7 @@ sub cluster_state {
                 filter_metadata => [ 'boolean', 'filter_metadata=true' ],
                 filter_routing_table =>
                     [ 'boolean', 'filter_routing_table=true' ],
-                filter_indices => [ 'flatter', 'filter_indices' ],
+                filter_indices => [ 'flatten', 'filter_indices' ],
                 }
 
         },
