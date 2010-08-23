@@ -103,6 +103,11 @@ sub new {
         $self->$_( $params->{$_} );
     }
     $servers = [$servers] unless ref $servers eq 'ARRAY';
+    for (@$servers) {
+        $_ = 'http://' . $_
+            unless m{^http(?:s)?://};
+        s{/+$}{};
+    }
     $self->{_servers}{$$} = $servers;
     $self->{_default_servers} = [@$servers];
     return $self;
@@ -921,22 +926,33 @@ sub _build_cmd {
     return join '/', '', grep {defined} ( $prefix, @cmd, $postfix );
 }
 
+=item C<servers()>
+
+=cut
+
 #===================================
-sub servers { shift->{_servers}{$$} || [] }
+sub servers {
+#===================================
+    my $self = shift;
+    if (@_) {
+        $self->{_servers} = { $$ => shift };
+    }
+    return $self->{_servers}{$$} || [];
+}
+
+#===================================
+sub default_servers { shift->{_default_servers} }
 #===================================
 
 #===================================
 sub refresh_servers {
 #===================================
     my $self = shift;
-    my @servers = ( @{ $self->servers }, @{ $self->{_default_servers} } );
+    my @servers = ( @{ $self->servers }, @{ $self->default_servers } );
 
     my @live_servers;
     foreach my $server (@servers) {
         next unless $server;
-        $server = 'http://' . $server
-            unless $server =~ m{^http(?:s)?://};
-        $server =~ s{/+$}{};
 
         my $nodes = eval {
             my $result = $self->_request( $server, 'GET', '/_cluster/nodes' );
@@ -958,15 +974,17 @@ sub refresh_servers {
         $_ = 'http://' . ( $1 || $2 ) . ':' . $3;
     }
 
-    $self->{_servers} = { $$ => \@live_servers };
-    $self->{_current_server}
-        = { $$ => $live_servers[ int( rand(@live_servers) ) ] };
+    $self->servers( \@live_servers );
+    $self->current_server( $live_servers[ int( rand(@live_servers) ) ] );
 }
 
 #===================================
 sub current_server {
 #===================================
     my $self = shift;
+    if (@_) {
+        $self->{_current_server} = { $$ => shift };
+    }
     unless ( $self->{_current_server}{$$} ) {
         $self->refresh_servers;
     }
@@ -1028,13 +1046,9 @@ sub request {
 
         return $result unless $error;
 
-        if ( ref $error ) {
-            my $code = $error->{-vars}{status_code} || 0;
-            my $msg  = $error->{-vars}{status_msg}  || '';
-            if (   $code == 500
-                && $msg =~ /Can't connect|Server closed connection/ )
-            {
-                warn "Error connecting to '$current_server' : $msg";
+        if ( ref $error) {
+            if ($error->isa('ElasticSearch::Error::Connection')) {
+                warn "Error connecting to '$current_server' : ".$error->{-vars}{status_msg};
                 $self->refresh_servers;
                 next;
             }
@@ -1091,9 +1105,11 @@ sub _request {
         $error_msg  = $json_error;
     }
     else {
+        $error_msg = $error_params->{status_msg};
         $error_type
-            = $error_params->{status_msg} eq 'read timeout'
-            ? 'Timeout'
+            = $error_msg eq 'read timeout'
+            ? 'Timeout' :
+            $error_msg=~ /Can't connect|Server closed connection/ ? 'Connection'
             : 'Request';
         $error_msg
             = $result && $result->{error}
@@ -1167,13 +1183,22 @@ sub _params {
     }
     return ( $self, $params );
 }
+
 #===================================
 sub throw {
 #===================================
     my $self = shift;
-    my $type = shift;
-    my $msg  = shift;
-    my $vars = shift;
+    die $self->build_error( @_, 1 );
+}
+
+#===================================
+sub build_error {
+#===================================
+    my $self   = shift;
+    my $type   = shift;
+    my $msg    = shift;
+    my $vars   = shift;
+    my $caller = shift || 0;
 
     my $class = ref $self || $self;
     my $error_class = $class . '::Error::' . $type;
@@ -1182,8 +1207,8 @@ sub throw {
     $msg =~ s/\n/\n    /g;
 
     my $debug = ref $self ? $self->debug : 1;
-    my ( undef, $file, $line ) = caller(0);
-    my $error = bless {
+    my ( undef, $file, $line ) = caller($caller);
+    return bless {
         -text       => $msg,
         -line       => $line,
         -file       => $file,
@@ -1191,7 +1216,6 @@ sub throw {
         -stacktrace => $debug ? _stack_trace() : ''
     }, $error_class;
 
-    die $error;
 }
 
 #===================================
@@ -1252,6 +1276,7 @@ package ElasticSearch::Error;
 @ElasticSearch::Error::NoServers::ISA = __PACKAGE__;
 @ElasticSearch::Error::Request::ISA   = __PACKAGE__;
 @ElasticSearch::Error::Timeout::ISA   = __PACKAGE__;
+@ElasticSearch::Error::Connection::ISA   = __PACKAGE__;
 @ElasticSearch::Error::JSON::ISA      = __PACKAGE__;
 
 use strict;
