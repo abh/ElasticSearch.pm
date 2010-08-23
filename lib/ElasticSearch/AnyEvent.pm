@@ -1,52 +1,10 @@
-# use Devel::Cycle;use ElasticSearch::AnyEvent; $c=ElasticSearch::AnyEvent->new(servers=>['127.0.0.1:9200','127.0.0.1:9201']); $c->trace_calls(0)
-# $d=$c->cluster_health
-# $cv=AE::cv(); $w=AnyEvent->io(fh=>\*STDIN,poll=>'r',cb=>$cv); $cv->recv; undef $w
-
-
 package ElasticSearch::AnyEvent;
 
 use strict;
 use warnings FATAL => 'all';
 use base 'ElasticSearch';
 use Scalar::Util();
-
-#===================================
-sub current_server {
-#===================================
-    my $self = shift;
-    if (@_) {
-        $self->_set_current_server(@_)
-    }
-    return ElasticSearch::AnyEvent::CondVar->new($self)
-        ->refresh_servers( $self->_check_current_server );
-}
-
-=item C<timeout()>
-
-=cut
-
-#===================================
-sub timeout {
-#===================================
-    my $self = shift;
-    if (@_) {
-        $self->{_timeout} = shift;
-    }
-    return $self->{_timeout} || 0;
-}
-
-#===================================
-sub _check_current_server { shift->{_current_server}{$$} }
-sub _set_current_server { $_[0]->{_current_server} = { $$ => $_[1] } }
-#===================================
-
-#===================================
-sub refresh_servers {
-#===================================
-    my $self = shift;
-    $self->_set_current_server(undef);
-    return ElasticSearch::AnyEvent::CondVar->new($self)->refresh_servers();
-}
+use AnyEvent::HTTP qw(http_request);
 
 #===================================
 sub request {
@@ -66,133 +24,202 @@ sub request {
         utf8::encode($data);
     }
 
-    return ElasticSearch::AnyEvent::CondVar->new($self)
-        ->failover_request( $method, $cmd, $data );
-}
+    my $cv = $self->cv;
 
-#===================================
-#===================================
-package ElasticSearch::AnyEvent::CondVar;
-#===================================
-#===================================
+    my $cv_weak = $cv;
+    Scalar::Util::weaken $cv_weak;
 
-use AnyEvent();
-use base 'AnyEvent::CondVar';
-use AnyEvent::HTTP qw(http_request);
-
-our $count     = 0;
-our $destroyed = 0;
-
-our %Objects;
-
-#===================================
-sub new {
-#===================================
-    my $proto = shift;
-    my $class = ref $proto || $proto;
-    my $self  = AnyEvent->condvar;
-    bless $self, $class;
-    $self->{es}      = shift;
-    $self->{COUNT}   = ++$count;
-    $Objects{$count} = $self;
-    Scalar::Util::weaken( $Objects{$count} );
-    my ( $c, undef, $l, $s ) = caller(1);
-    use Data::Dump qw(pp);
-    pp( scalar { 'Creating' => [ $c, $l, $s ] } );
-    return $self;
-}
-
-#===================================
-sub request {
-#===================================
-    my ( $self, $method, $server, $cmd, $data ) = @_;
-    $self->{PARAMS} = [ $method, $server, $cmd, $data ];
-    my $cv = $self;
-    Scalar::Util::weaken $cv if defined wantarray;
-
-    $self->{guard} = http_request(
-        $method => $server . $cmd,
-        body    => $data,
-        timeout => $self->es->timeout,
-        sub {
-#                $DB::single=1;
-            delete $cv->{guard};
-            $cv->es->_log_request( $method, $server, $cmd, $data );
-            my ( $result, $error ) = $cv->parse_response( $server, @_ );
-            if ($result) {
-                return $cv->send($result);
-            }
-            return $cv->croak($error);
-        }
-    );
-    return $self;
-}
-
-#===================================
-sub failover_request {
-#===================================
-    my ( $self, $method, $cmd, $data ) = @_;
-
-    my $cv = $self;
-    Scalar::Util::weaken $cv if defined wantarray;
-
+    $cv->guard($cv) unless defined wantarray();
     my ( $request_cb, $server_cb, $server );
-    $server_cb = sub {
-#                $DB::single=1;
-        delete $cv->{guard};
 
-        $server = shift || $cv->croak($@);
-        $cv->{guard} = http_request(
-            $method => $server . $cmd,
-            body    => $data,
-        timeout => $self->es->timeout,
-            $request_cb
+    $server_cb = sub {
+        $server = shift;
+        unless ($server) {
+            $cv_weak->croak($@);
+            return;
+        }
+        $cv_weak->guard(
+            http_request(
+                $method => $server . $cmd,
+                body    => $data,
+                timeout => $self->timeout,
+                $request_cb
+            )
         );
     };
 
     $request_cb = sub {
-#                $DB::single=1;
-        delete $cv->{guard};
-        $cv->es->_log_request( $method, $server, $cmd, $data );
-        my ( $result, $error ) = $cv->parse_response( $server, @_ );
-        return $cv->send($result) if $result;
+        $self->_log_request( $method, $server, $cmd, $data );
+        my ( $result, $error ) = $self->_parse_response( $server, @_ );
+        if ($result) {
+            $cv_weak->send($result);
+            $cv_weak->clear_guard if $cv_weak;
+            return;
+        }
 
         if ( ref $error
             && $error->isa('ElasticSearch::AnyEvent::Error::Connection') )
         {
-            print STDERR "$error\n";
-            $cv->{guard} = $cv->es->refresh_servers->cb( $server_cb);
+            my $local_cv = $cv_weak;
+            $cv_weak->clear_guard;
+            $cv_weak->guard( $self->refresh_servers->cb($server_cb) );
             return;
         }
-        $cv->croak($error);
+        $cv_weak->croak($error);
+        $cv_weak->clear_guard if $cv_weak;
     };
-    Scalar::Util::weaken($server_cb);
-    Scalar::Util::weaken($request_cb);
-    $self->{guard} = $self->es->current_server->cb( $server_cb );
-    return $self;
+
+    my $request = $self->current_server;
+    $cv->guard($request);
+    $request->cb( $server_cb, 'weak' );
+    return $cv;
+
 }
 
-=item C<parse_response()>
+#===================================
+sub current_server {
+#===================================
+    my $self = shift;
+    if (@_) {
+        $self->_set_current_server(@_);
+    }
+
+    my $cv = $self->cv;
+    if ( my $current_server = $self->_check_current_server ) {
+        $cv->send($current_server);
+        return $cv;
+    }
+
+    my $refresh_cv = $self->refresh_servers;
+    $cv->guard($refresh_cv);
+    $cv->guard($cv) unless defined wantarray;
+
+    my $cv_weak = $cv;
+    Scalar::Util::weaken($cv_weak);
+
+    $refresh_cv->cb(
+        sub {
+            $cv_weak->clear_guard;
+            if ( my $current_server = shift ) {
+                return $cv_weak->send($current_server);
+            }
+            return $cv_weak->croak($@);
+        },
+        'weak'
+    );
+
+    return $cv;
+}
+
+#===================================
+sub _check_current_server { shift->{_current_server}{$$} }
+sub _set_current_server { $_[0]->{_current_server} = { $$ => $_[1] } }
+#===================================
+
+#===================================
+sub refresh_servers {
+#===================================
+    my $self = shift;
+    $self->_set_current_server(undef);
+
+    my %servers = map { $_ => 1 }
+        ( @{ $self->servers }, @{ $self->default_servers } );
+    my @all_servers = keys %servers;
+
+    my $cv = $self->cv( on_destroy => sub { %servers = () } );
+
+    my $cv_weak = $cv;
+    Scalar::Util::weaken($cv_weak);
+    $cv->guard($cv) unless defined wantarray;
+
+    foreach my $server ( keys %servers ) {
+        $servers{$server} = http_request(
+            GET     => $server . '/_cluster/nodes',
+            timeout => $self->timeout,
+            sub {
+                if ( my $current = $self->_check_current_server ) {
+                    %servers = ();
+                    $cv_weak->send($current);
+                    $cv_weak->clear_guard if $cv_weak;
+                    return;
+                }
+                delete $servers{$server};
+
+                $self->_log_request( 'GET', $server, '/_cluster/nodes' );
+                my ( $result, $error )
+                    = $self->_parse_response( $server, @_ );
+
+                if ($result) {
+                    if ( my $current_server = $self->_parse_nodes($result) ) {
+                        %servers = ();
+                        $cv_weak->send($current_server);
+                        $cv_weak->clear_guard if $cv_weak;
+                        return;
+                    }
+                    $self->throw( 'Internal',
+                        "Couldn't extract servers from ", $result );
+                }
+
+                return if %servers;
+
+                $cv_weak->croak(
+                    $self->build_error(
+                        'NoServers',
+                        "Could not retrieve a list of active servers: ",
+                        { servers => \@all_servers }
+                    )
+                );
+
+                $cv_weak->clear_guard if $cv_weak;
+
+            }
+        );
+    }
+
+    return $cv;
+}
+
+=item C<_parse_nodes()>
 
 =cut
+
+#===================================
+sub _parse_nodes {
+#===================================
+    my $self = shift;
+    my $nodes = shift->{nodes} || {};
+
+    my @live_servers;
+    for ( values %$nodes ) {
+        my $ip
+            = $_->{http_address}
+            || $_->{httpAddress}
+            || next;
+        $ip =~ m{inet\[(\S*)/(\S+):(\d+)\]} or next;
+        push @live_servers, 'http://' . ( $1 || $2 ) . ':' . $3;
+    }
+    return unless @live_servers;
+    my $current_server = $live_servers[ int( rand(@live_servers) ) ];
+
+    $self->servers( \@live_servers );
+    $self->_set_current_server($current_server);
+
+    return $current_server;
+}
 
 our %Connection_Errors = map { $_ => 1 }
     ( 'Connection reset by peer', 'Connection refused', 'Broken pipe' );
 
 #===================================
-sub parse_response {
+sub _parse_response {
 #===================================
     my ( $self, $server, $content, $headers ) = @_;
-$DB::single=1;
-    $content = '{}' unless defined $content;
-
-    my $es = $self->es;
 
     my ( $result, $json_error );
-    eval { $result = $es->JSON->decode($content); 1 }
+    eval { $result = $self->JSON->decode($content); 1 }
         or $json_error = ( $@ || 'Unknown JSON error' );
 
-    $es->_log_result( $result || $content );
+    $self->_log_result( $result || $content );
 
     my ( $status, $reason ) = @{$headers}{qw(Status Reason)};
     my $success = $status =~ /^2/;
@@ -225,94 +252,71 @@ $DB::single=1;
             . $error_params->{status_code} . ')';
     }
 
-    my $error
-        = $self->es->build_error( $error_type, $error_msg, $error_params );
+    my $error = $self->build_error( $error_type, $error_msg, $error_params );
     return ( undef, $error );
 }
 
-#===================================
-sub refresh_servers {
-#===================================
-    my $self = shift;
-    if ( my $server = shift ) {
-        $self->send($server);
-        return $self;
-    }
-
-    my $es = $self->es;
-    my %servers
-        = map { $_ => 1 } ( @{ $es->servers }, @{ $es->default_servers } );
-    $self->{servers} = \%servers;
-
-    my @all_servers = keys %servers;
-
-    my $cv = $self;
-    Scalar::Util::weaken $cv if defined wantarray;
-
-    foreach my $server ( keys %servers ) {
-        my $request
-            = $cv->new($es)->request( 'GET', $server, '/_cluster/nodes' );
-        $servers{$server} = $request;
-
-        $request->cb(
-            sub {
-#                $DB::single=1;
-                if ( my $current = $cv->es->_check_current_server ) {
-                    %servers = ();
-                    return $cv->send($current);
-                }
-                return $cv->send unless $servers{$server};
-                my $nodes = $_[0] && shift()->{nodes};
-                if ($nodes) {
-                    my @live_servers;
-                    for ( values %$nodes ) {
-                        my $server
-                            = $_->{http_address}
-                            || $_->{httpAddress}
-                            || next;
-                        $server =~ m{inet\[(\S*)/(\S+):(\d+)\]} or next;
-                        push @live_servers,
-                            'http://' . ( $1 || $2 ) . ':' . $3;
-                    }
-                    if (@live_servers) {
-                        $es->servers( \@live_servers );
-                        %servers = ();
-                        my $current_server
-                            = $live_servers[ int( rand(@live_servers) ) ];
-                        $cv->es->_set_current_server($current_server);
-                        return $cv->send($current_server);
-                    }
-                }
-
-                delete $servers{$server};
-                my $error = $@ || "No servers returned from $server\n";
-                if ( ref $error && $error->{status_msg} ) {
-                    $error = $error->{status_msg} . " from $server\n";
-                }
-                print STDERR $error;
-
-                return if %servers;
-                $cv->croak(
-                    $cv->es->build_error(
-                        'NoServers',
-                        "Could not retrieve a list of active servers: $@",
-                        { servers => \@all_servers }
-                    )
-                );
-
-            },
-            1
-        );
-    }
-    return $self;
-}
-
-=item C<es()>
+=item C<timeout()>
 
 =cut
 
 #===================================
-sub es { $_[0]->{es} }
+sub timeout {
+#===================================
+    my $self = shift;
+    if (@_) {
+        $self->{_timeout} = shift;
+    }
+    return $self->{_timeout} || 0;
+}
+
+=item C<cv()>
+
+=cut
+
+#===================================
+sub cv { shift; ElasticSearch::AnyEvent::CondVar->new(@_) }
+#===================================
+
+#===================================
+#===================================
+package ElasticSearch::AnyEvent::CondVar;
+#===================================
+#===================================
+
+use AnyEvent();
+our @ISA = qw(AnyEvent::CondVar);
+
+#===================================
+sub new {
+#===================================
+    my $proto = shift;
+    my $class = ref $proto || $proto;
+    my $self  = AnyEvent->condvar;
+    bless $self, $class;
+    my %params = @_;
+    $self->{$_} = $params{$_} for keys %params;
+    $self->{_guard} = [];
+    return $self;
+}
+
+=item C<guard()>
+
+=cut
+
+#===================================
+sub guard {
+#===================================
+    my $self = shift;
+    push @{ $self->{_guard} }, @_;
+}
+
+=item C<clear_guard()>
+
+=cut
+
+#===================================
+sub clear_guard { shift->{_guard} = []; }
 #===================================
 
 =item C<cb()>
@@ -345,15 +349,7 @@ sub cb {
 sub DESTROY {
 #===================================
     my $self = shift;
-    if ( $self->{servers} ) {
-        %{ $self->{servers} } = ();
-    }
-    use Data::Dump qw(pp);
-    $destroyed++;
-    pp( {   DESTROYING =>
-                { created => $count, destroyed => $destroyed, self => $self }
-        }
-    );
+    ( delete $self->{on_destroy} )->() if $self->{on_destroy};
 }
 
 #===================================
