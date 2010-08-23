@@ -1233,7 +1233,6 @@ sub _stack_trace {
         . $line;
     while ( my @caller = caller($i) ) {
         $o .= sprintf( "%-4d %-30s %4d  %s\n", $i++, @caller[ 0, 2, 3 ] );
-        last if $caller[3] eq '(eval)';
     }
     return $o .= $line;
 }
