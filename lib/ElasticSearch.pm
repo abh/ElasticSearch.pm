@@ -948,10 +948,14 @@ sub default_servers { shift->{_default_servers} }
 sub refresh_servers {
 #===================================
     my $self = shift;
-    my @servers = ( @{ $self->servers }, @{ $self->default_servers } );
+
+    my %servers = map { $_ => 1 }
+        ( @{ $self->servers }, @{ $self->default_servers } );
+
+    my @all_servers = keys %servers;
 
     my @live_servers;
-    foreach my $server (@servers) {
+    foreach my $server (@all_servers) {
         next unless $server;
 
         my $nodes = eval {
@@ -967,7 +971,7 @@ sub refresh_servers {
     $self->throw(
         'NoServers',
         "Could not retrieve a list of active servers: $@",
-        { servers => \@servers }
+        { servers => \@all_servers }
     ) unless @live_servers;
     for (@live_servers) {
         $_ =~ m{inet\[(\S*)/(\S+):(\d+)\]};
