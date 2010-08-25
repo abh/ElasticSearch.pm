@@ -7,6 +7,106 @@ use Scalar::Util();
 use AnyEvent::HTTP qw(http_request);
 
 #===================================
+sub multi_task {
+#===================================
+    my ( $self, $params ) = ElasticSearch::_params(@_);
+
+    my $action = $params->{action}
+        or $self->throw( 'Param', "Missing required param 'action'" );
+
+    $self->throw( 'Param', "Unknown action '$action'" )
+        unless $self->can($action);
+
+    my $max       = $params->{max}       || 10;
+    my $min_queue = $params->{min_queue} || $max * 2;
+
+    my @queue      = ( @{ $params->{queue} || [] } );
+    my $pull_queue = $params->{pull_queue};
+    my $on_success = $params->{on_success};
+    my $on_error
+        = exists $params->{on_error}
+        ? $params->{on_error}
+        : sub { warn $_[0] };
+
+    my ( $queue_empty, $running, $errors, $group_ended ) = (0) x 4;
+    $queue_empty = 1 unless $pull_queue;
+
+    my ( $issue_job, $croak_cb, %jobs );
+
+    my $group_cv = $self->cv( on_destroy => sub { %jobs = () } );
+
+    my $weak_group_cv = $group_cv;
+    Scalar::Util::weaken($weak_group_cv);
+    $group_cv->guard($group_cv) unless defined wantarray;
+
+    $group_cv->begin(
+        sub {
+            my $cv = shift;
+            $cv->send( $errors == 0 );
+            $cv->clear_guard;
+        }
+    );
+
+    $croak_cb = sub {
+        %jobs = ();
+        $weak_group_cv->croak(@_);
+        $weak_group_cv->clear_guard if $weak_group_cv;
+        0;
+    };
+
+    $issue_job = sub {
+        return unless $running < $max;
+        if ( !$queue_empty and @queue < $min_queue ) {
+            my @new_args;
+            eval {
+                @new_args = $pull_queue->();
+                1;
+            } or return $croak_cb->($@);
+            $queue_empty = 1 unless @new_args;
+            push @queue, @new_args;
+        }
+        unless (@queue) {
+            $group_ended++ || $weak_group_cv->end;
+            return;
+        }
+
+        my $args = shift @queue;
+        my $job_cv = eval { $self->$action($args) } or return $croak_cb->($@);
+        $jobs{"$job_cv"} = $job_cv;
+        Scalar::Util::weaken($job_cv);
+        $running++;
+        $weak_group_cv->begin;
+        $job_cv->cb(
+            sub {
+                $running--;
+                $weak_group_cv->end;
+                delete $jobs{"$job_cv"};
+
+                my $error = $@;
+                eval {
+                    if ( my $result = shift )
+                    {
+                        $on_success->( $args, $result ) if $on_success;
+                    }
+                    else {
+                        $errors++;
+                        $on_error->( $error, $args, \@queue ) if $on_error;
+                    }
+                    1;
+                } or return $croak_cb->($@);
+                $issue_job->();
+            },
+            'weak'
+        );
+
+        return 1;
+    };
+    while (1) { $issue_job->() || last }
+    return $group_cv
+
+}
+
+#===================================
 sub request {
 #===================================
     my $self   = shift;
@@ -240,6 +340,8 @@ package ElasticSearch::AnyEvent::CondVar;
 use AnyEvent();
 our @ISA = qw(AnyEvent::CondVar);
 
+my $created = my $destroyed = 0;
+
 #===================================
 sub new {
 #===================================
@@ -312,8 +414,6 @@ sub stats {
 #===================================
     print "Created: $created\nDestroyed: $destroyed\n";
 }
-
-my $created = my $destroyed = 0;
 
 #===================================
 #===================================
