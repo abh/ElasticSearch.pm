@@ -248,6 +248,7 @@ sub new {
     my $self  = AnyEvent->condvar;
     bless $self, $class;
     my %params = @_;
+    $created++;
     $self->{$_} = $params{$_} for keys %params;
     $self->{_guard} = [];
     return $self;
@@ -302,8 +303,17 @@ sub cb {
 sub DESTROY {
 #===================================
     my $self = shift;
+    $destroyed++;
     ( delete $self->{on_destroy} )->() if $self->{on_destroy};
 }
+
+#===================================
+sub stats {
+#===================================
+    print "Created: $created\nDestroyed: $destroyed\n";
+}
+
+my $created = my $destroyed = 0;
 
 #===================================
 #===================================
