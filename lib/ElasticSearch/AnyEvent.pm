@@ -85,7 +85,7 @@ sub current_server {
     }
 
     my $cv = $self->cv;
-    if ( my $current_server = $self->_check_current_server ) {
+    if ( my $current_server = $self->_get_current_server ) {
         $cv->send($current_server);
         return $cv;
     }
@@ -112,11 +112,6 @@ sub current_server {
 }
 
 #===================================
-sub _check_current_server { shift->{_current_server}{$$} }
-sub _set_current_server { $_[0]->{_current_server} = { $$ => $_[1] } }
-#===================================
-
-#===================================
 sub refresh_servers {
 #===================================
     my $self = shift;
@@ -137,7 +132,7 @@ sub refresh_servers {
             GET     => $server . '/_cluster/nodes',
             timeout => $self->timeout,
             sub {
-                if ( my $current = $self->_check_current_server ) {
+                if ( my $current = $self->_get_current_server ) {
                     %servers = ();
                     $cv_weak->send($current);
                     $cv_weak->clear_guard if $cv_weak;
@@ -177,34 +172,6 @@ sub refresh_servers {
     }
 
     return $cv;
-}
-
-=item C<_parse_nodes()>
-
-=cut
-
-#===================================
-sub _parse_nodes {
-#===================================
-    my $self = shift;
-    my $nodes = shift->{nodes} || {};
-
-    my @live_servers;
-    for ( values %$nodes ) {
-        my $ip
-            = $_->{http_address}
-            || $_->{httpAddress}
-            || next;
-        $ip =~ m{inet\[(\S*)/(\S+):(\d+)\]} or next;
-        push @live_servers, 'http://' . ( $1 || $2 ) . ':' . $3;
-    }
-    return unless @live_servers;
-    my $current_server = $live_servers[ int( rand(@live_servers) ) ];
-
-    $self->servers( \@live_servers );
-    $self->_set_current_server($current_server);
-
-    return $current_server;
 }
 
 our %Connection_Errors = map { $_ => 1 }
@@ -254,20 +221,6 @@ sub _parse_response {
 
     my $error = $self->build_error( $error_type, $error_msg, $error_params );
     return ( undef, $error );
-}
-
-=item C<timeout()>
-
-=cut
-
-#===================================
-sub timeout {
-#===================================
-    my $self = shift;
-    if (@_) {
-        $self->{_timeout} = shift;
-    }
-    return $self->{_timeout} || 0;
 }
 
 =item C<cv()>
