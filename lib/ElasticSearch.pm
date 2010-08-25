@@ -996,26 +996,29 @@ sub current_server {
 }
 
 #===================================
-sub ua {
+sub _ua {
 #===================================
     my $self = shift;
     unless ( $self->{_ua}{$$} ) {
-        my $ua = $self->{_ua} = LWP::UserAgent->new( %{ $self->ua_options } );
-        $ua->conn_cache( LWP::ConnCache->new );
-        $self->{_ua} = { $$ => $ua };
+        $self->{_ua} = {
+            $$ => LWP::UserAgent->new(
+                timeout    => $self->timeout,
+                conn_cache => LWP::ConnCache->new
+            )
+        };
+
     }
     return $self->{_ua}{$$};
 }
 
 #===================================
-sub ua_options {
+sub timeout {
 #===================================
     my $self = shift;
     if (@_) {
-        ( undef, my $params ) = $self->_params(@_);
-        $self->{_ua_options} = $params;
+        $self->{_timeout} = shift;
     }
-    return $self->{_ua_options} ||= {};
+    return $self->{_timeout} || 0;
 }
 
 #===================================
@@ -1080,7 +1083,7 @@ sub _request {
 
     $self->_log_request( $method, $current_server, $cmd, $data );
 
-    my $server_response = $self->ua->request($request);
+    my $server_response = $self->_ua->request($request);
 
     my $content = $server_response->decoded_content;
     $content = decode_utf8($content);
@@ -1464,7 +1467,7 @@ a non-existent index.
                                'es2.foo.com:9200'],     # multiple servers
             trace_calls => 1 | '/path/to/log/file',
             debug       => 1 | 0,
-            ua_options  => { LWP::UserAgent options},
+            timeout     => 30,
 
      );
 
@@ -1473,7 +1476,7 @@ ARRAY ref with a list of servers.  These servers are used to retrieve a list
 of all servers in the cluster, after which one is chosen at random to be
 the L</"current_server()">.
 
-See also: L</"debug()">, L</"ua_options()">, L</"trace_calls()">,
+See also: L</"debug()">, L</"timeout()">, L</"trace_calls()">,
           L</"refresh_servers()">, L</"servers()">, L</"current_server()">
 
 =cut
@@ -2243,25 +2246,6 @@ tries to get a new current server by calling L</"refresh_servers()">.
 
 Returns a HASH containing the version C<number> string, the build C<date> and
 whether or not the current server is a C<snapshot_build>.
-
-=head3 C<ua()>
-
-    $ua = $e->ua
-
-Returns the current L<LWP::UserAgent> instance for the current PID.  If there is
-none, then it creates a new instance, with any options specified in
-L</"ua_options()">
-
-C<Keep-alive> is used by default (via L<LWP::ConnCache>).
-
-=head3 C<ua_options()>
-
-    $ua_options = $e->ua({....})
-
-Get/sets the current list of options to be used when creating a new
-C<LWP::UserAgent> instance.  You may, for instance, want to set C<timeout>
-
-This is best set when creating a new instance of ElasticSearch with L</"new()">.
 
 =cut
 
