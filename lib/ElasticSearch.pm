@@ -949,37 +949,29 @@ sub refresh_servers {
 #===================================
     my $self = shift;
 
+    $self->_set_current_server(undef);
+
     my %servers = map { $_ => 1 }
         ( @{ $self->servers }, @{ $self->default_servers } );
 
     my @all_servers = keys %servers;
 
-    my @live_servers;
     foreach my $server (@all_servers) {
         next unless $server;
 
-        my $nodes = eval {
-            my $result = $self->_request( $server, 'GET', '/_cluster/nodes' );
-            return $result->{nodes};
-        } or next;
-
-        @live_servers = grep {$_}
-            map { $_->{http_address} || $_->{httpAddress} } values %$nodes;
-        last if @live_servers;
+        my $result
+            = eval { $self->_request( $server, 'GET', '/_cluster/nodes' ) }
+            or next;
+        my $current_server = $self->_parse_nodes($result)
+            or next;
+        return $current_server;
     }
 
     $self->throw(
         'NoServers',
         "Could not retrieve a list of active servers: $@",
         { servers => \@all_servers }
-    ) unless @live_servers;
-    for (@live_servers) {
-        $_ =~ m{inet\[(\S*)/(\S+):(\d+)\]};
-        $_ = 'http://' . ( $1 || $2 ) . ':' . $3;
-    }
-
-    $self->servers( \@live_servers );
-    $self->current_server( $live_servers[ int( rand(@live_servers) ) ] );
+    );
 }
 
 #===================================
@@ -987,12 +979,42 @@ sub current_server {
 #===================================
     my $self = shift;
     if (@_) {
-        $self->{_current_server} = { $$ => shift };
+        $self->_set_current_server(@_);
     }
-    unless ( $self->{_current_server}{$$} ) {
-        $self->refresh_servers;
+    return $self->_get_current_server || $self->refresh_servers;
+}
+
+#===================================
+sub _get_current_server { shift->{_current_server}{$$} }
+sub _set_current_server { $_[0]->{_current_server} = { $$ => $_[1] } }
+#===================================
+
+=item C<_parse_nodes()>
+
+=cut
+
+#===================================
+sub _parse_nodes {
+#===================================
+    my $self = shift;
+    my $nodes = shift->{nodes} || {};
+
+    my @live_servers;
+    for ( values %$nodes ) {
+        my $ip
+            = $_->{http_address}
+            || $_->{httpAddress}
+            || next;
+        $ip =~ m{inet\[(\S*)/(\S+):(\d+)\]} or next;
+        push @live_servers, 'http://' . ( $1 || $2 ) . ':' . $3;
     }
-    return $self->{_current_server}{$$};
+    return unless @live_servers;
+    my $current_server = $live_servers[ int( rand(@live_servers) ) ];
+
+    $self->servers( \@live_servers );
+    $self->_set_current_server($current_server);
+
+    return $current_server;
 }
 
 #===================================
@@ -1053,9 +1075,10 @@ sub request {
 
         return $result unless $error;
 
-        if ( ref $error) {
-            if ($error->isa('ElasticSearch::Error::Connection')) {
-                warn "Error connecting to '$current_server' : ".$error->{-vars}{status_msg};
+        if ( ref $error ) {
+            if ( $error->isa('ElasticSearch::Error::Connection') ) {
+                warn "Error connecting to '$current_server' : "
+                    . $error->{-vars}{status_msg};
                 $self->refresh_servers;
                 next;
             }
@@ -1114,9 +1137,9 @@ sub _request {
     else {
         $error_msg = $error_params->{status_msg};
         $error_type
-            = $error_msg eq 'read timeout'
-            ? 'Timeout' :
-            $error_msg=~ /Can't connect|Server closed connection/ ? 'Connection'
+            = $error_msg eq 'read timeout' ? 'Timeout'
+            : $error_msg =~ /Can't connect|Server closed connection/
+            ? 'Connection'
             : 'Request';
         $error_msg
             = $result && $result->{error}
@@ -1156,8 +1179,7 @@ sub _log_result {
         = ref $content eq 'HASH' ? $json->encode($content)
         : ref $content eq 'ARRAY'
         ? join( "\n", map { $json->encode($_) } @$content )
-        : $content;
-
+        : defined $content ? $content : '';
     my @lines = split /\n/, $out;
     while (@lines) {
         my $line = shift @lines;
@@ -1277,13 +1299,13 @@ sub trace_calls {
 package ElasticSearch::Error;
 #===================================
 #===================================
-@ElasticSearch::Error::Internal::ISA  = __PACKAGE__;
-@ElasticSearch::Error::Param::ISA     = __PACKAGE__;
-@ElasticSearch::Error::NoServers::ISA = __PACKAGE__;
-@ElasticSearch::Error::Request::ISA   = __PACKAGE__;
-@ElasticSearch::Error::Timeout::ISA   = __PACKAGE__;
-@ElasticSearch::Error::Connection::ISA   = __PACKAGE__;
-@ElasticSearch::Error::JSON::ISA      = __PACKAGE__;
+@ElasticSearch::Error::Internal::ISA   = __PACKAGE__;
+@ElasticSearch::Error::Param::ISA      = __PACKAGE__;
+@ElasticSearch::Error::NoServers::ISA  = __PACKAGE__;
+@ElasticSearch::Error::Request::ISA    = __PACKAGE__;
+@ElasticSearch::Error::Timeout::ISA    = __PACKAGE__;
+@ElasticSearch::Error::Connection::ISA = __PACKAGE__;
+@ElasticSearch::Error::JSON::ISA       = __PACKAGE__;
 
 use strict;
 use warnings FATAL => 'all', NONFATAL => 'redefine';
