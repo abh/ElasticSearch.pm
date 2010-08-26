@@ -6,6 +6,8 @@ use base 'ElasticSearch';
 use Scalar::Util qw(weaken);
 use AnyEvent::HTTP qw(http_request);
 
+our $VERSION = '0.01';
+
 #===================================
 sub multi_task {
 #===================================
@@ -323,10 +325,6 @@ sub _parse_response {
     return ( undef, $error );
 }
 
-=item C<cv()>
-
-=cut
-
 #===================================
 sub cv { shift; ElasticSearch::AnyEvent::CondVar->new(@_) }
 #===================================
@@ -356,10 +354,6 @@ sub new {
     return $self;
 }
 
-=item C<guard()>
-
-=cut
-
 #===================================
 sub guard {
 #===================================
@@ -367,17 +361,9 @@ sub guard {
     push @{ $self->{_guard} }, @_;
 }
 
-=item C<clear_guard()>
-
-=cut
-
 #===================================
 sub clear_guard { shift->{_guard} = []; }
 #===================================
-
-=item C<cb()>
-
-=cut
 
 #===================================
 sub cb {
@@ -396,10 +382,6 @@ sub cb {
         }
     );
 }
-
-=item C<DESTROY()>
-
-=cut
 
 #===================================
 sub DESTROY {
@@ -435,4 +417,98 @@ our @ISA = qw(ElasticSearch::Error);
     = ( __PACKAGE__, 'ElasticSearch::Error::Timeout' );
 @ElasticSearch::AnyEvent::Error::JSON::ISA
     = ( __PACKAGE__, 'ElasticSearch::Error::JSON' );
-1
+
+=head1 NAME
+
+ElasticSearch::AnyEvent - An AnyEvent API for communicating with ElasticSearch
+
+=head1 VERSION
+
+Version 0.01, tested against ElasticSearch server version 0.9.0.
+
+Note: This is an alpha pre-release version. The interface may change.
+This module is woefully undocumented and lacking tests for the moment.
+
+=cut
+
+=head1 DESCRIPTION
+
+ElasticSearch::AnyEvent adds an async interface to ElasticSearch.pm.  See
+L<ElasticSearch> for more details.
+
+=cut
+
+=head1 SYNOPSIS
+
+    use ElasticSearch::AnyEvent();
+    my $es = ElasticSearch::AnyEvent->new(servers=>'127.0.0.1:9200');
+
+    # Blocking
+
+        my $cv = $es->current_server;
+        print $cv->recv;
+
+        # or
+
+        print $es->current_server->recv
+
+    # Callback
+
+        my $cv = $es->current_server;
+        $es->cb(sub {
+            my $result = shift || die $@;
+            ....
+        });
+
+    # Context
+
+        my $cv = $es->current_server;
+        undef $cv;                      # cancels
+
+        $es->refresh_servers;           # fire-and-forget
+        start_event_loop();
+
+        {
+           my $cv1 = $es->foo;
+           my $cv2 = $es->foo;
+           $cv2->cb(...);
+        }
+        # $cv1 is cancelled
+        # $cv2 is backgrounded / fire-and-forget
+
+    # Multitask:
+
+        $es->multi_task(
+            action      => 'index',
+            pull_queue  => sub {
+                # returns a list of HASHes to be passed to $es->$action(...)
+                # can return (eg) 1000 at a time
+            },
+            on_success  => sub {                # optional
+                my ($args,$result) = @_;
+                ...
+            },
+            on_error    => sub {                # optional
+                my ($error,$args,$queue) = @_;
+                ...
+            },
+        )->recv || die "Error";
+
+=head1 AUTHOR
+
+Clinton Gormley, C<< <drtech at cpan.org> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright 2010 Clinton Gormley.
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of either: the GNU General Public License as published
+by the Free Software Foundation; or the Artistic License.
+
+See http://dev.perl.org/licenses/ for more information.
+
+
+=cut
+
+1;
