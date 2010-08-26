@@ -3,7 +3,7 @@ package ElasticSearch::AnyEvent;
 use strict;
 use warnings FATAL => 'all';
 use base 'ElasticSearch';
-use Scalar::Util();
+use Scalar::Util qw(weaken);
 use AnyEvent::HTTP qw(http_request);
 
 #===================================
@@ -36,7 +36,7 @@ sub multi_task {
     my $group_cv = $self->cv( on_destroy => sub { %jobs = () } );
 
     my $weak_group_cv = $group_cv;
-    Scalar::Util::weaken($weak_group_cv);
+    weaken $weak_group_cv;
     $group_cv->guard($group_cv) unless defined wantarray;
 
     $group_cv->begin(
@@ -73,7 +73,7 @@ sub multi_task {
         my $args = shift @queue;
         my $job_cv = eval { $self->$action($args) } or return $croak_cb->($@);
         $jobs{"$job_cv"} = $job_cv;
-        Scalar::Util::weaken($job_cv);
+        weaken $job_cv;
         $running++;
         $weak_group_cv->begin;
         $job_cv->cb(
@@ -127,7 +127,7 @@ sub request {
     my $cv = $self->cv;
 
     my $cv_weak = $cv;
-    Scalar::Util::weaken $cv_weak;
+    weaken $cv_weak;
 
     $cv->guard($cv) unless defined wantarray();
     my ( $request_cb, $server_cb, $server );
@@ -195,7 +195,7 @@ sub current_server {
     $cv->guard($cv) unless defined wantarray;
 
     my $cv_weak = $cv;
-    Scalar::Util::weaken($cv_weak);
+    weaken $cv_weak;
 
     $refresh_cv->cb(
         sub {
@@ -224,7 +224,7 @@ sub refresh_servers {
     my $cv = $self->cv( on_destroy => sub { %servers = () } );
 
     my $cv_weak = $cv;
-    Scalar::Util::weaken($cv_weak);
+    weaken $cv_weak;
     $cv->guard($cv) unless defined wantarray;
 
     foreach my $server ( keys %servers ) {
