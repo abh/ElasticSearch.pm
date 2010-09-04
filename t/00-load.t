@@ -2,7 +2,7 @@
 
 #use Test::Most qw(defer_plan);
 our $test_num;
-BEGIN { $test_num = 175 }
+BEGIN { $test_num = 179 }
 
 use Test::Most tests => $test_num;
 use Module::Build;
@@ -135,6 +135,26 @@ SKIP: {
 
     wait_for_es();
 
+    ### UPDATE SETTINGS ###
+    ok $es->update_index_settings(
+        index    => $Index,
+        settings => { number_of_replicas => 2 }
+        ),
+        'Update index settings';
+    wait_for_es();
+    is $es->index_status( index => $Index )
+        ->{indices}{$Index}{settings}{'index.number_of_replicas'}, 2,
+        ' - has 2 replicas';
+    ok $es->update_index_settings(
+        index    => $Index,
+        settings => { number_of_replicas => 1 }
+        ),
+        ' - reset to 1 replica';
+    wait_for_es();
+    is $es->index_status( index => $Index )
+        ->{indices}{$Index}{settings}{'index.number_of_replicas'}, 1,
+        ' - has 1 replica';
+
     ### REFRESH INDEX ###
     ok $es->refresh_index()->{ok}, 'Refresh index';
 
@@ -194,8 +214,7 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } }
-        ),
+        actions => { add => { alias => 'alias_1', index => $Index } } ),
         'add alias_1';
     wait_for_es();
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
