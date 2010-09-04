@@ -499,6 +499,21 @@ sub mapping {
 }
 
 #===================================
+sub update_index_settings {
+#===================================
+    my ( $self, $params ) = &_params;
+    $self->_do_action(
+        'update_settings',
+        {   method  => 'PUT',
+            cmd     => CMD_index,
+            postfix => '_settings',
+            data => { index => 'settings'}
+        },
+        $params
+    );
+}
+
+#===================================
 sub cluster_state {
 #===================================
     shift()->_do_action(
@@ -1654,6 +1669,22 @@ Deletes an existing index, or throws an exception if the index doesn't exist, eg
     $result = $e->delete_index( index => 'twitter' );
 
 See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/delete_index>
+
+=head3 C<update_index_settings()>
+
+    $result = $e->update_index_settings(
+        index       => multi,
+        settings    => { ... settings ...}
+    );
+
+Update the settings for all, one or many indices.  Currently only the
+C<number_of_replicas> is exposed:
+
+    $result = $e->update_index_settings(
+        settings    => {  number_of_replicas => 1 }
+    );
+
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/update_settings/>
 
 =head3 C<aliases()>
 
