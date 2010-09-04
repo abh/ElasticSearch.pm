@@ -1,5 +1,10 @@
 Revision history for ElasticSearch
 
+0.20    2010-09-04
+        Supports ElasticSearch version 0.10.0
+        Added update_index_settings() plus test
+        Added pod coverage test
+
 0.19    2010-08-19
         Supports ElasticSearch version 0.9.1
         Minor bug fix to cluster_state
