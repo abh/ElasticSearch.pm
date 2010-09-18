@@ -464,6 +464,7 @@ sub put_mapping {
         data => {
             properties => 'properties',
             _all       => ['_all'],
+            _source    => ['_source'],
         }
     };
 
@@ -477,8 +478,10 @@ sub put_mapping {
         { params => $params }
         );
 
-    $type_val->{_all} = delete $params->{_all}
-        if exists $params->{_all};
+    for (qw(_all _source)) {
+        $type_val->{$_} = delete $params->{$_}
+            if exists $params->{$_};
+    }
     $params->{$type_name} = $type_val;
     $defn->{data} = { $type_name => $type_name };
     $self->_do_action( $action, $defn, $params );
@@ -1804,6 +1807,7 @@ See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/opt
         index               => multi,
         type                => single,
         _all                => { ... },
+        _source             => { ... },
         properties          => { ... },      # required
         timeout             => '5m' | '10s', # optional
         ignore_conflicts    => 1 | 0,        # optional
@@ -1823,6 +1827,7 @@ to specify an official C<mapping> instead, eg:
     $result = $e->put_mapping(
         index   => ['twitter','buzz'],
         type    => 'tweet',
+        source  => { compress => 1 },
         properties  =>  {
             user        =>  {type  =>  "string", index      =>  "not_analyzed"},
             message     =>  {type  =>  "string", null_value =>  "na"},

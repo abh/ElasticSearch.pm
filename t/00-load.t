@@ -214,7 +214,8 @@ SKIP: {
 
     ### INDEX ALIASES ###
     ok $es->aliases(
-        actions => { add => { alias => 'alias_1', index => $Index } } ),
+        actions => { add => { alias => 'alias_1', index => $Index } }
+        ),
         'add alias_1';
     wait_for_es();
     is $es->get_aliases->{aliases}{alias_1}[0], $Index, 'alias_1 added';
@@ -765,6 +766,7 @@ sub index_test_docs {
             store       => "yes",
             term_vector => "with_positions_offsets"
         },
+        _source    => { compress => 1 },
         properties => {
             text => { type => 'string',  store  => 'yes' },
             num  => { type => 'integer', store  => 'yes' },
@@ -778,6 +780,7 @@ sub index_test_docs {
             store       => "yes",
             term_vector => "with_positions_offsets"
         },
+        _source    => { compress => 1 },
         properties => {
             text => { type => 'string',  store  => 'yes' },
             num  => { type => 'integer', store  => 'yes' },
