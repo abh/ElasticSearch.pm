@@ -8,7 +8,7 @@ use HTTP::Request();
 use JSON::XS();
 use Encode qw(decode_utf8);
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 use constant {
     ONE_REQ     => 1,
@@ -1168,7 +1168,7 @@ ElasticSearch - An API for communicating with ElasticSearch
 
 =head1 VERSION
 
-Version 0.20, tested against ElasticSearch server version 0.10.0.
+Version 0.21, tested against ElasticSearch server version 0.10.0.
 
 NOTE: Various features present in older versions of the ElasticSearch server
 which have been removed from ElasticSearch 0.10.0 have also been removed from

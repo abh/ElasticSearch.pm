@@ -1,4 +1,7 @@
 Revision history for ElasticSearch
+0.21    2010-09-18
+        Supports ElasticSearch version 0.10.0
+        Added the _source parameter to put_mapping()
 
 0.20    2010-09-04
         Supports ElasticSearch version 0.10.0
