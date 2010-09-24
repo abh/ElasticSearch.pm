@@ -1009,7 +1009,8 @@ sub _parse_nodes {
         push @live_servers, 'http://' . ( $1 || $2 ) . ':' . $3;
     }
     return unless @live_servers;
-    my $current_server = $live_servers[ int( rand(@live_servers) ) ];
+    my $current_server = splice @live_servers,int( rand(@live_servers)),1;
+    push @live_servers,$current_server;
 
     $self->servers( \@live_servers );
     $self->_set_current_server($current_server);
