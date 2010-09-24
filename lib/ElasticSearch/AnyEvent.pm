@@ -4,12 +4,95 @@ use strict;
 use warnings FATAL => 'all';
 use base 'ElasticSearch';
 use Scalar::Util qw(weaken);
+use AnyEvent();
 use AnyEvent::HTTP qw(http_request);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
+
+=item C<bulk_create()>
+
+=cut
 
 #===================================
-sub multi_task {
+sub bulk_create {
+#===================================
+    my ( $self, $params ) = ElasticSearch::_params(@_);
+    return $self->bulk_index(
+        action => 'create',
+        %$params
+    );
+}
+
+=item C<bulk_insert()>
+
+=cut
+
+#===================================
+sub bulk_index {
+#===================================
+    my ( $self, $params ) = ElasticSearch::_params(@_);
+    my %retried;
+    return $self->bulk_action(
+        action   => 'index',
+        on_error => sub { _retry_action( \%retried, 'index', @_ ) },
+        %$params
+    );
+}
+
+=item C<bulk_delete()>
+
+=cut
+
+#===================================
+sub bulk_delete {
+#===================================
+    my ( $self, $params ) = ElasticSearch::_params(@_);
+    my %retried;
+    return $self->bulk_action(
+        action   => 'delete',
+        on_error => sub { _retry_action( \%retried, undef, @_ ) },
+        %$params
+    );
+}
+
+=item C<_retry_action()>
+
+=cut
+
+#===================================
+sub _retry_action {
+#===================================
+    my $retried    = shift;
+    my $new_action = shift;
+    my $error      = shift;
+    if ( $error->isa('ElasticSearch::AnyEvent::Error::Timeout') ) {
+        my $args = shift;
+        unless ( $retried->{ $args->{id} }++ ) {
+            $args->{action} = $new_action if $new_action;
+            my $queue = shift;
+            push @$queue, $args;
+            return;
+        }
+    }
+    warn $error;
+}
+
+=item C<bulk_search()>
+
+=cut
+
+#===================================
+sub bulk_search {
+#===================================
+    my ( $self, $params ) = ElasticSearch::_params(@_);
+    return $self->bulk_action(
+        action => 'search',
+        %$params
+    );
+}
+
+#===================================
+sub bulk_action {
 #===================================
     my ( $self, $params ) = ElasticSearch::_params(@_);
 
@@ -19,19 +102,19 @@ sub multi_task {
     $self->throw( 'Param', "Unknown action '$action'" )
         unless $self->can($action);
 
-    my $max       = $params->{max}       || 10;
-    my $min_queue = $params->{min_queue} || $max * 2;
+    my $max       = $params->{max}        || 10;
+    my $low_queue = $params->{low_queue} || $max * 2;
 
-    my @queue      = ( @{ $params->{queue} || [] } );
-    my $pull_queue = $params->{pull_queue};
-    my $on_success = $params->{on_success};
+    my @queue        = ( @{ $params->{queue} || [] } );
+    my $on_low_queue = $params->{on_low_queue};
+    my $on_success   = $params->{on_success};
     my $on_error
         = exists $params->{on_error}
         ? $params->{on_error}
         : sub { warn $_[0] };
 
     my ( $queue_empty, $running, $errors, $group_ended ) = (0) x 4;
-    $queue_empty = 1 unless $pull_queue;
+    $queue_empty = 1 unless $on_low_queue;
 
     my ( $issue_job, $croak_cb, %jobs );
 
@@ -58,13 +141,13 @@ sub multi_task {
 
     $issue_job = sub {
         return unless $running < $max;
-        if ( !$queue_empty and @queue < $min_queue ) {
+        if ( !$queue_empty and @queue < $low_queue ) {
             my @new_args;
-            eval {
-                @new_args = $pull_queue->();
-                1;
-            } or return $croak_cb->($@);
+            eval { @new_args = $on_low_queue->( \@queue ); 1; }
+                or return $croak_cb->($@);
             $queue_empty = 1 unless @new_args;
+            return $new_args[0]->cb($issue_job)
+                if @new_args == 1 && eval { $new_args[0]->can('cb') };
             push @queue, @new_args;
         }
         unless (@queue) {
@@ -72,8 +155,10 @@ sub multi_task {
             return;
         }
 
-        my $args = shift @queue;
-        my $job_cv = eval { $self->$action($args) } or return $croak_cb->($@);
+        my $args      = shift @queue;
+        my $my_action = delete $args->{action} || $action;
+        my $job_cv    = eval { $self->$my_action($args) }
+            or return $croak_cb->($@);
         $jobs{"$job_cv"} = $job_cv;
         weaken $job_cv;
         $running++;
@@ -188,6 +273,11 @@ sub current_server {
 
     my $cv = $self->cv;
     if ( my $current_server = $self->_get_current_server ) {
+        if ( ( my @live_servers = @{ $self->servers } ) > 1 ) {
+            my $next_server = shift @live_servers;
+            $self->servers( [ @live_servers, $next_server ] );
+            $self->_set_current_server($next_server);
+        }
         $cv->send($current_server);
         return $cv;
     }
