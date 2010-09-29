@@ -162,6 +162,101 @@ sub delete {
     );
 }
 
+my %Bulk_Actions = (
+    'delete' => { index => ONE_REQ, type => ONE_REQ, id => ONE_REQ },
+    'create' =>
+        { index => ONE_REQ, type => ONE_REQ, id => ONE_OPT, data => ONE_REQ },
+    'index' =>
+        { index => ONE_REQ, type => ONE_REQ, id => ONE_OPT, data => ONE_REQ },
+);
+
+#===================================
+sub bulk {
+#===================================
+    my $self = shift;
+    my $actions = ref $_[0] eq 'ARRAY' ? shift() : [@_];
+
+    return { actions => [], results => [] } unless @$actions;
+
+    my $json      = $self->JSON;
+    my $indenting = $json->get_indent;
+    $json->indent(0);
+
+    my $json_docs = eval { $self->_build_bulk_query($actions) }
+        || do { $json->indent($indenting); die $@ };
+
+    my $results = $self->request( {
+            method => 'POST',
+            cmd    => '/_bulk',
+            data   => $json_docs
+        }
+    );
+    my $items = $results->{items}
+        || $self->throw( 'Request', 'Malformed response to bulk query',
+        $results );
+    my @errors;
+
+    for ( my $i = 0; $i < @$actions; $i++ ) {
+        my ($action) = ( keys %{ $items->[$i] } );
+        my $error = $items->[$i]{$action}{error} or next;
+        push @errors, { action => $actions->[$i], error => $error };
+    }
+    return {
+        actions => $actions,
+        results => $items,
+        ( @errors ? ( errors => \@errors ) : () )
+    };
+}
+
+#===================================
+sub _build_bulk_query {
+#===================================
+    my $self    = shift;
+    my $actions = shift;
+    my $json    = $self->JSON;
+
+    my $json_docs = '';
+    for my $data (@$actions) {
+
+        $self->throw( "Param", 'bulk() expects an array of HASH refs', $data )
+            unless ref $data eq 'HASH';
+
+        my ( $action, $params ) = %$data;
+
+        my $defn = $Bulk_Actions{$action}
+            || $self->throw( "Param", "Unknown bulk action '$action'" );
+
+        my %metadata;
+        $params = {%$params};
+
+        for my $key ( keys %$defn ) {
+            my $val = delete $params->{$key};
+            unless ( defined $val ) {
+                next if $defn->{$key} == ONE_OPT;
+                $self->throw(
+                    'Param',
+                    "Missing required param '$key' for bulk action '$action'",
+                    $data
+                );
+            }
+            $metadata{$key} = $val;
+        }
+        $self->throw(
+            'Param',
+            "Unknown params for bulk action '$action': "
+                . join( ', ', keys %$params ),
+            $data
+        ) if keys %$params;
+
+        my $data = delete $metadata{data};
+        my $request = $json->encode( { $action => \%metadata } ) . "\n";
+        $request .= $json->encode($data) . "\n"
+            if $data;
+        $json_docs .= $request;
+    }
+    return \$json_docs;
+}
+
 my %Search_Data = (
     facets        => ['facets'],
     from          => ['from'],
@@ -900,9 +995,12 @@ sub request {
         || $self->throw( 'Request', "No cmd specified" );
 
     my $data = $params->{data};
-    my $json = $self->JSON;
-    $data = $json->encode($data)
-        if defined $data;
+    if ( defined $data ) {
+        $data
+            = ref $data eq 'SCALAR'
+            ? $$data
+            : $self->JSON->encode($data);
+    }
 
     while (1) {
         my $current_server = $self->current_server;
@@ -1015,8 +1113,14 @@ sub _log_result {
     my $self    = shift;
     my $log     = $self->trace_calls or return;
     my $content = shift;
-    my $out     = ref $content ? $self->JSON->encode($content) : $content;
-    my @lines   = split /\n/, $out;
+    my $json    = $self->JSON;
+    my $out
+        = ref $content eq 'HASH' ? $json->encode($content)
+        : ref $content eq 'ARRAY'
+        ? join( "\n", map { $json->encode($_) } @$content )
+        : $content;
+
+    my @lines = split /\n/, $out;
     while (@lines) {
         my $line = shift @lines;
         if ( length $line > 65 ) {
@@ -1441,6 +1545,69 @@ Example:
     $e->delete( index => 'twitter', type => 'tweet', id => 1);
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/delete>
+
+=head3 C<bulk()>
+
+    $result = $e->bulk([
+        { create => { index => 'foo', type => 'bar', id => 123,
+                      data => { text => 'foo bar'}              }},
+        { index  => { index => 'foo', type => 'bar', id => 123,
+                      data => { text => 'foo bar'}              }},
+        { delete => { index => 'foo', type => 'bar', id => 123  }},
+    ]);
+
+Perform multiple C<index>,C<create> or C<delete> operations in a single
+request.
+
+For the above example, the C<$result> will look like:
+
+    {
+        actions => [ the list of actions you passed in ],
+        results => [
+                 { create => { id => 123, index => "foo", type => "bar" } },
+                 { index  => { id => 123, index => "foo", type => "bar" } },
+                 { delete => { id => 123, index => "foo", type => "bar" } },
+        ]
+    }
+
+where each row in C<results> corresponds to the same row in C<actions>.
+If there are any errors for individual rows, then the C<$result> will contain
+a key C<errors> which contains an array of each error and the associated
+action, eg:
+
+    $result = {
+        actions => [
+
+            ## NOTE - num is numeric
+            {   index => { index => 'bar', type  => 'bar', id => 123,
+                           data  => { num => 123 } } },
+
+            ## NOTE - num is a string
+            {   index => { index => 'bar', type  => 'bar', id => 123,
+                           data  => { num => 'foo bar' } } },
+        ],
+        errors => [
+            {
+                action => {
+                    index => { index => 'bar', type  => 'bar', id => 123,
+                               data  => { num => 'text foo' } }
+                },
+                error => "MapperParsingException[Failed to parse [num]]; ...",
+            },
+        ],
+        results => [
+            { index => { id => 123, index => "bar", type => "bar" } },
+            {   index => {
+                    error => "MapperParsingException[Failed to parse [num]];...",
+                    id    => 123, index => "bar", type  => "bar",
+                },
+            },
+        ],
+
+    };
+
+See L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/bulk> for
+more details.
 
 =cut
 
