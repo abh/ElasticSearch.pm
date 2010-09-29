@@ -583,6 +583,19 @@ sub put_mapping {
 }
 
 #===================================
+sub delete_mapping {
+#===================================
+    my ( $self, $params ) = &_params;
+    $self->_do_action(
+        'delete_mapping',
+        {   method => 'DELETE',
+            cmd    => CMD_index_TYPE,
+        },
+        $params
+    );
+}
+
+#===================================
 sub mapping {
 #===================================
     my ( $self, $params ) = &_params;
@@ -2006,6 +2019,16 @@ to specify an official C<mapping> instead, eg:
 
 See also: L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/put_mapping>
 and L<http://www.elasticsearch.com/docs/elasticsearch/mapping>
+
+=head3 C<delete_mapping()>
+
+    $result = $e->delete_mapping(
+        index   => multi,
+        type    => single,
+    );
+
+Deletes a mapping/type in one or more indices.
+See also L<http://www.elasticsearch.com/docs/elasticsearch/rest_api/admin/indices/delete_mapping>
 
 =head3 C<mapping()>
 
