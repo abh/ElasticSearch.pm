@@ -116,6 +116,7 @@ my %Index_Defn = (
     cmd => CMD_INDEX_TYPE_id,
     qs  => {
         create  => [ 'boolean',  'op_type=create' ],
+        refresh => [ 'boolean',  'refresh=true' ],
         timeout => [ 'duration', 'timeout' ],
     },
     data => 'data',
@@ -157,6 +158,7 @@ sub delete {
         'delete',
         {   method => 'DELETE',
             cmd    => CMD_INDEX_TYPE_ID,
+            qs     => { refresh => [ 'boolean', 'refresh=true' ], }
         },
         @_
     );
@@ -1461,7 +1463,8 @@ See also: L</"debug()">, L</"ua_options()">, L</"trace_calls()">,
             ...
         },
         timeout => eg '1m' or '10s'     # optional
-        create  => 1 |0                 # optional
+        create  => 1 | 0                # optional
+        refresh => 1 | 0                # optional
     );
 
 eg:
@@ -1548,6 +1551,7 @@ See also: L<KNOWN ISSUES>,
         index   => single,
         type    => single,
         id      => single,
+        refresh => 1 | 0                # optional
     );
 
 Deletes the document stored at C<index/type/id> or throws an exception if
