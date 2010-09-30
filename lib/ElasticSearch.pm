@@ -2,13 +2,11 @@ package ElasticSearch;
 
 use strict;
 use warnings FATAL => 'all';
-use LWP::UserAgent();
-use LWP::ConnCache();
-use HTTP::Request();
 use JSON::XS();
-use Encode qw(decode_utf8);
 
 our $VERSION = '0.21';
+
+our %Transport = ( 'http' => 'ElasticSearch::Transport::HTTP', );
 
 use constant {
     ONE_REQ     => 1,
@@ -97,6 +95,7 @@ sub new {
         _base_qs    => [],
         _camel_case => 0
     };
+
     bless $self, ref $proto || $proto;
     my $servers = delete $params->{servers};
     for ( keys %$params ) {
@@ -110,8 +109,28 @@ sub new {
     }
     $self->{_servers}{$$} = $servers;
     $self->{_default_servers} = [@$servers];
+    $self->transport($params->{transport});
     return $self;
 }
+
+#===================================
+sub transport {
+#===================================
+    my $self = shift;
+    if (@_) {
+        my $transport_name = shift ||'http';
+        my $transport_class = $Transport{ $transport_name}
+            or $self->throw(
+            "Param",
+            "Unknown transport '$transport_name'. Available: "
+                . join( ', ', sort keys %Transport )
+            );
+        eval "require  $transport_class" or $self->throw("Internal",$@);
+        $self->{_transport} =  $transport_class->new($self);
+    }
+    return $self->{_transport};
+}
+
 
 #===================================
 sub get { shift()->_do_action( 'get', { cmd => CMD_INDEX_TYPE_ID }, @_ ) }
@@ -625,7 +644,7 @@ sub update_index_settings {
         {   method  => 'PUT',
             cmd     => CMD_index,
             postfix => '_settings',
-            data => { index => 'settings'}
+            data    => { index => 'settings' }
         },
         $params
     );
@@ -960,7 +979,7 @@ sub refresh_servers {
         next unless $server;
 
         my $result
-            = eval { $self->_request( $server, 'GET', '/_cluster/nodes' ) }
+            = eval { $self->transport->request( $server, 'GET', '/_cluster/nodes' ) }
             or next;
         my $current_server = $self->_parse_nodes($result)
             or next;
@@ -1009,29 +1028,13 @@ sub _parse_nodes {
         push @live_servers, 'http://' . ( $1 || $2 ) . ':' . $3;
     }
     return unless @live_servers;
-    my $current_server = splice @live_servers,int( rand(@live_servers)),1;
-    push @live_servers,$current_server;
+    my $current_server = splice @live_servers, int( rand(@live_servers) ), 1;
+    push @live_servers, $current_server;
 
     $self->servers( \@live_servers );
     $self->_set_current_server($current_server);
 
     return $current_server;
-}
-
-#===================================
-sub _ua {
-#===================================
-    my $self = shift;
-    unless ( $self->{_ua}{$$} ) {
-        $self->{_ua} = {
-            $$ => LWP::UserAgent->new(
-                timeout    => $self->timeout,
-                conn_cache => LWP::ConnCache->new
-            )
-        };
-
-    }
-    return $self->{_ua}{$$};
 }
 
 #===================================
@@ -1070,7 +1073,7 @@ sub request {
         my ( $result, $error );
         eval {
             $result
-                = $self->_request( $current_server, $method, $cmd, $data );
+                = $self->transport->request( $current_server, $method, $cmd, $data );
             1;
         } or $error = $@ || 'Unknown error';
 
@@ -1089,67 +1092,6 @@ sub request {
 
         $self->throw( 'Request', $error, { request => $params } );
     }
-}
-
-#===================================
-sub _request {
-#===================================
-    my $self           = shift;
-    my $current_server = shift;
-    my $method         = shift;
-    my $cmd            = shift;
-    my $data           = shift;
-
-    my $request = HTTP::Request->new( $method, $current_server . $cmd );
-
-    $request->add_content_utf8($data)
-        if defined $data;
-
-    $self->_log_request( $method, $current_server, $cmd, $data );
-
-    my $server_response = $self->_ua->request($request);
-
-    my $content = $server_response->decoded_content;
-    $content = decode_utf8($content);
-
-    my ( $result, $json_error );
-    eval { $result = $self->JSON->decode($content); 1 }
-        or $json_error = ( $@ || 'Unknown JSON error' );
-
-    $self->_log_result( $result || $content );
-
-    my $success = $server_response->is_success;
-
-    return $result if $success && !$json_error;
-
-    my $error_params = {
-        server      => $current_server,
-        response    => $json_error ? $content : $result,
-        status_code => $server_response->code,
-        status_msg  => $server_response->message,
-
-    };
-
-    my ( $error_type, $error_msg );
-    if ( $success && $json_error ) {
-        $error_type = 'JSON';
-        $error_msg  = $json_error;
-    }
-    else {
-        $error_msg = $error_params->{status_msg};
-        $error_type
-            = $error_msg eq 'read timeout' ? 'Timeout'
-            : $error_msg =~ /Can't connect|Server closed connection/
-            ? 'Connection'
-            : 'Request';
-        $error_msg
-            = $result && $result->{error}
-            ? $result->{error}
-            : $error_params->{status_msg} . ' ('
-            . $error_params->{status_code} . ')';
-    }
-
-    $self->throw( $error_type, $error_msg, $error_params );
 }
 
 #===================================
@@ -1180,7 +1122,8 @@ sub _log_result {
         = ref $content eq 'HASH' ? $json->encode($content)
         : ref $content eq 'ARRAY'
         ? join( "\n", map { $json->encode($_) } @$content )
-        : defined $content ? $content : '';
+        : defined $content ? $content
+        :                    '';
     my @lines = split /\n/, $out;
     while (@lines) {
         my $line = shift @lines;
