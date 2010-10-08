@@ -1825,9 +1825,9 @@ However, these heuristics can be confused, so it safer (and much more powerful)
 to specify an official C<mapping> instead, eg:
 
     $result = $e->put_mapping(
-        index   => ['twitter','buzz'],
-        type    => 'tweet',
-        source  => { compress => 1 },
+        index    => ['twitter','buzz'],
+        type     => 'tweet',
+        _source  => { compress => 1 },
         properties  =>  {
             user        =>  {type  =>  "string", index      =>  "not_analyzed"},
             message     =>  {type  =>  "string", null_value =>  "na"},
